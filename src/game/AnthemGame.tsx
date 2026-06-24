@@ -97,18 +97,18 @@ export default function AnthemGame() {
 
     const mount = mountRef.current;
     const scene = new THREE.Scene();
-    // Pre-dawn sky — readable but somber
-    scene.background = new THREE.Color(0x4a4a55);
-    scene.fog = new THREE.Fog(0x4a4a55, 80, 280);
+    // Pre-dawn sky — soft blue-grey
+    scene.background = new THREE.Color(0x8a9bb0);
+    scene.fog = new THREE.Fog(0x8a9bb0, 100, 320);
 
     const camera = new THREE.PerspectiveCamera(
       72,
       mount.clientWidth / mount.clientHeight,
       0.1,
-      600,
+      700,
     );
-    // Spawn south of plaza looking north toward the Council
-    camera.position.set(0, 1.7, 30);
+    // Spawn inside the plaza, looking north toward the Council
+    camera.position.set(0, 1.7, 12);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
