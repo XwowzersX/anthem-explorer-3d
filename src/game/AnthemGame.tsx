@@ -320,18 +320,18 @@ export default function AnthemGame() {
     }
 
     // ---------- ZONE 2: THE FIELD (south, golden grass) ----------
-    const fieldGeo = new THREE.PlaneGeometry(80, 80);
+    const fieldGeo = new THREE.PlaneGeometry(140, 140);
     const fieldMat = new THREE.MeshStandardMaterial({ color: 0x8a7a3a, roughness: 1 });
     const field = new THREE.Mesh(fieldGeo, fieldMat);
     field.rotation.x = -Math.PI / 2;
-    field.position.set(0, 0.02, 55);
+    field.position.set(0, 0.02, 130);
     scene.add(field);
     // tufts of grass
-    for (let i = 0; i < 120; i++) {
+    for (let i = 0; i < 220; i++) {
       const g = new THREE.ConeGeometry(0.3, 1.2, 5);
       const m = new THREE.MeshStandardMaterial({ color: 0xc8a84a });
       const tuft = new THREE.Mesh(g, m);
-      tuft.position.set((Math.random() - 0.5) * 70, 0.6, 30 + Math.random() * 50);
+      tuft.position.set((Math.random() - 0.5) * 120, 0.6, 85 + Math.random() * 90);
       scene.add(tuft);
     }
     // Liberty 5-3000 — a tall golden figure
@@ -348,36 +348,40 @@ export default function AnthemGame() {
     );
     head.position.y = 1.85;
     liberty.add(head);
-    liberty.position.set(8, 0, 60);
+    liberty.position.set(8, 0, 120);
     scene.add(liberty);
-    scene.add(new THREE.PointLight(0xffd070, 1.5, 12)).position.set(8, 2, 60);
+    const libLight = new THREE.PointLight(0xffd070, 1.8, 18);
+    libLight.position.set(8, 2, 120);
+    scene.add(libLight);
 
-    // ---------- ZONE 3: THE TUNNEL (east of city, down stairs into dim chamber) ----------
-    // grating marker
+    // ---------- ZONE 3: THE TUNNEL (far east) ----------
     const grate = new THREE.Mesh(
       new THREE.BoxGeometry(3, 0.1, 3),
-      new THREE.MeshStandardMaterial({ color: 0x222018, metalness: 0.7, roughness: 0.4 }),
+      new THREE.MeshStandardMaterial({
+        color: 0x3a3228,
+        metalness: 0.7,
+        roughness: 0.4,
+        emissive: 0x1a1208,
+        emissiveIntensity: 0.4,
+      }),
     );
-    grate.position.set(40, 0.05, 0);
+    grate.position.set(82, 0.05, 0);
     scene.add(grate);
-    // tunnel walls (a small underground room east further)
-    const tunnelGroup = new THREE.Group();
+    // tunnel chamber further east
     const tunFloor = new THREE.Mesh(
-      new THREE.PlaneGeometry(20, 14),
+      new THREE.PlaneGeometry(24, 16),
       new THREE.MeshStandardMaterial({ color: 0x1a1612, roughness: 1 }),
     );
     tunFloor.rotation.x = -Math.PI / 2;
-    tunFloor.position.set(60, 0.03, 0);
-    tunnelGroup.add(tunFloor);
-    // walls
+    tunFloor.position.set(108, 0.03, 0);
+    scene.add(tunFloor);
     [
-      [60, 0, -7, 20, 4, 0.5],
-      [60, 0, 7, 20, 4, 0.5],
-      [70, 0, 0, 0.5, 4, 14],
+      [108, 0, -8, 24, 5, 0.5],
+      [108, 0, 8, 24, 5, 0.5],
+      [120, 0, 0, 0.5, 5, 16],
     ].forEach(([x, , z, w, h, d]) => {
       addBlock(x, z, w, h, d, 0x2a2620);
     });
-    scene.add(tunnelGroup);
     // the LIGHT BOX — glowing pickup
     const lightBox = new THREE.Mesh(
       new THREE.BoxGeometry(0.6, 0.8, 0.6),
@@ -387,33 +391,33 @@ export default function AnthemGame() {
         emissiveIntensity: 1.5,
       }),
     );
-    lightBox.position.set(65, 0.9, 0);
+    lightBox.position.set(113, 0.9, 0);
     scene.add(lightBox);
-    const lightBoxLight = new THREE.PointLight(0xffeeaa, 2, 18);
-    lightBoxLight.position.set(65, 1.5, 0);
+    const lightBoxLight = new THREE.PointLight(0xffeeaa, 2.2, 24);
+    lightBoxLight.position.set(113, 1.5, 0);
     scene.add(lightBoxLight);
 
-    // ---------- ZONE 4: THE COUNCIL CHAMBER (north of the city, behind the big block) ----------
-    // a circle of pillars
+    // ---------- ZONE 4: COUNCIL CHAMBER (inside the Council hall area) ----------
     for (let i = 0; i < 8; i++) {
       const a = (i / 8) * Math.PI * 2;
-      const x = Math.cos(a) * 7;
-      const z = -50 + Math.sin(a) * 7;
-      addBlock(x, z, 1.2, 8, 1.2, 0x5a5040);
+      const x = Math.cos(a) * 8;
+      const z = -90 + Math.sin(a) * 8;
+      addBlock(x, z, 1.2, 9, 1.2, 0x5a5040);
     }
-    // central altar where the player presents the light
     const altar = new THREE.Mesh(
-      new THREE.BoxGeometry(2, 1.2, 2),
-      new THREE.MeshStandardMaterial({ color: 0x6a5a3a, emissive: 0x221810, emissiveIntensity: 0.4 }),
+      new THREE.BoxGeometry(2.4, 1.4, 2.4),
+      new THREE.MeshStandardMaterial({ color: 0x6a5a3a, emissive: 0x221810, emissiveIntensity: 0.5 }),
     );
-    altar.position.set(0, 0.6, -50);
+    altar.position.set(0, 0.7, -90);
     scene.add(altar);
-    scene.add(new THREE.PointLight(0xffaa66, 1, 18)).position.set(0, 4, -50);
+    const altarLight = new THREE.PointLight(0xffaa66, 1.4, 24);
+    altarLight.position.set(0, 4, -90);
+    scene.add(altarLight);
 
-    // ---------- ZONE 5: THE UNCHARTED FOREST (west, dark trees) ----------
-    for (let i = 0; i < 90; i++) {
-      const x = -40 - Math.random() * 80;
-      const z = (Math.random() - 0.5) * 100;
+    // ---------- ZONE 5: THE UNCHARTED FOREST (far west) ----------
+    for (let i = 0; i < 220; i++) {
+      const x = -90 - Math.random() * 110;
+      const z = (Math.random() - 0.5) * 180;
       const trunk = new THREE.Mesh(
         new THREE.CylinderGeometry(0.4, 0.5, 5 + Math.random() * 3, 6),
         new THREE.MeshStandardMaterial({ color: 0x231a12 }),
@@ -429,21 +433,20 @@ export default function AnthemGame() {
       colliders.push({ box: new THREE.Box3().setFromObject(trunk).expandByScalar(0.2) });
     }
 
-    // ---------- ZONE 6: THE HOUSE OF THE UNMENTIONABLE TIMES (far west) ----------
-    // colored glass house
+    // ---------- ZONE 6: THE HOUSE OF THE UNMENTIONABLE TIMES (deep west) ----------
     const houseGroup = new THREE.Group();
     const houseColors = [0x7a3a3a, 0x3a5a7a, 0x6a6a3a, 0x4a3a6a];
     [
-      [-100, 0, -10, 12, 6, 0.4],
-      [-100, 0, 10, 12, 6, 0.4],
-      [-106, 0, 0, 0.4, 6, 20],
-      [-94, 0, 0, 0.4, 6, 20],
+      [-200, 0, -10, 14, 7, 0.4],
+      [-200, 0, 10, 14, 7, 0.4],
+      [-207, 0, 0, 0.4, 7, 20],
+      [-193, 0, 0, 0.4, 7, 20],
     ].forEach(([x, , z, w, h, d], i) => {
       const g = new THREE.BoxGeometry(w, h, d);
       const m = new THREE.MeshStandardMaterial({
         color: houseColors[i],
         emissive: houseColors[i],
-        emissiveIntensity: 0.25,
+        emissiveIntensity: 0.35,
         transparent: true,
         opacity: 0.85,
       });
@@ -452,30 +455,33 @@ export default function AnthemGame() {
       houseGroup.add(mesh);
       colliders.push({ box: new THREE.Box3().setFromObject(mesh).expandByScalar(0.15) });
     });
-    // roof
     const roof = new THREE.Mesh(
-      new THREE.BoxGeometry(13, 0.3, 21),
+      new THREE.BoxGeometry(15, 0.3, 21),
       new THREE.MeshStandardMaterial({ color: 0x2a2018 }),
     );
-    roof.position.set(-100, 6.1, 0);
+    roof.position.set(-200, 7.1, 0);
     houseGroup.add(roof);
     scene.add(houseGroup);
-    scene.add(new THREE.PointLight(0xfff0c0, 1.5, 25)).position.set(-100, 4, 0);
+    const houseLight = new THREE.PointLight(0xfff0c0, 2, 30);
+    houseLight.position.set(-200, 4, 0);
+    scene.add(houseLight);
 
-    // The Book — the final pickup
+    // The Book — final pickup
     const bookGroup = new THREE.Group();
     const book = new THREE.Mesh(
       new THREE.BoxGeometry(0.8, 0.15, 1.0),
       new THREE.MeshStandardMaterial({
         color: 0xeeddaa,
         emissive: 0xffe8a0,
-        emissiveIntensity: 0.8,
+        emissiveIntensity: 0.9,
       }),
     );
     bookGroup.add(book);
-    bookGroup.position.set(-100, 1.2, 0);
+    bookGroup.position.set(-200, 1.2, 0);
     scene.add(bookGroup);
-    scene.add(new THREE.PointLight(0xffeebb, 2.5, 14)).position.set(-100, 2, 0);
+    const bookLight = new THREE.PointLight(0xffeebb, 2.8, 16);
+    bookLight.position.set(-200, 2, 0);
+    scene.add(bookLight);
 
     // ---------- INTERACTABLES (story beats anchored to world objects) ----------
     const interactables: Interactable[] = [
