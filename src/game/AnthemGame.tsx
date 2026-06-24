@@ -138,7 +138,7 @@ export default function AnthemGame() {
     // ---------- GROUND (cobble plaza) ----------
     const groundGeo = new THREE.PlaneGeometry(1200, 1200, 1, 1);
     const groundMat = new THREE.MeshStandardMaterial({
-      color: 0x5a5650,
+      color: 0x3a3631,
       roughness: 0.95,
     });
     const ground = new THREE.Mesh(groundGeo, groundMat);
