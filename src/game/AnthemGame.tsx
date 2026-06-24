@@ -487,8 +487,8 @@ export default function AnthemGame() {
     const interactables: Interactable[] = [
       {
         beatId: "start",
-        position: new THREE.Vector3(0, 1, 0),
-        mesh: addBlock(0, 0, 1.4, 0.4, 1.4, 0x6a5d44, { emissive: 0x2a1f10, solid: false }),
+        position: new THREE.Vector3(0, 1, 28),
+        mesh: addBlock(0, 0, 1.6, 0.5, 1.6, 0x8a7858, { emissive: 0x3a2a14, solid: false }),
         label: "Read the parchment",
         order: 0,
       },
@@ -522,14 +522,14 @@ export default function AnthemGame() {
       },
       {
         beatId: "forest",
-        position: new THREE.Vector3(-55, 1, 0),
-        mesh: addBlock(-55, 0, 1, 0.2, 1, 0x4a3a2a, { emissive: 0x1a1208, solid: false }),
+        position: new THREE.Vector3(-85, 1, 0),
+        mesh: addBlock(-85, 0, 1.2, 0.25, 1.2, 0x4a3a2a, { emissive: 0x1a1208, solid: false }),
         label: "Enter the Uncharted Forest",
         order: 5,
       },
       {
         beatId: "house",
-        position: new THREE.Vector3(-100, 1, 0),
+        position: new THREE.Vector3(-200, 1, 0),
         mesh: houseGroup,
         label: "Enter the glass house",
         order: 6,
