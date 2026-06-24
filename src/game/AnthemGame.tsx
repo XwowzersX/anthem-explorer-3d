@@ -97,41 +97,48 @@ export default function AnthemGame() {
 
     const mount = mountRef.current;
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x1a1814);
-    scene.fog = new THREE.Fog(0x1a1814, 25, 120);
+    // Pre-dawn sky — readable but somber
+    scene.background = new THREE.Color(0x4a4a55);
+    scene.fog = new THREE.Fog(0x4a4a55, 80, 280);
 
     const camera = new THREE.PerspectiveCamera(
       72,
       mount.clientWidth / mount.clientHeight,
       0.1,
-      400,
+      600,
     );
-    camera.position.set(0, 1.7, 0);
+    // Spawn south of plaza looking north toward the Council
+    camera.position.set(0, 1.7, 30);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setSize(mount.clientWidth, mount.clientHeight);
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.05;
     mount.appendChild(renderer.domElement);
 
     // ---------- LIGHTING ----------
-    const hemi = new THREE.HemisphereLight(0xb8a37a, 0x1a1410, 0.45);
+    const hemi = new THREE.HemisphereLight(0xcfd3dc, 0x2a2a30, 0.95);
     scene.add(hemi);
-    const sun = new THREE.DirectionalLight(0xffd8a8, 0.7);
-    sun.position.set(40, 60, 20);
+    const ambient = new THREE.AmbientLight(0x6a6a70, 0.35);
+    scene.add(ambient);
+    const sun = new THREE.DirectionalLight(0xffe8c8, 1.1);
+    sun.position.set(80, 120, 40);
     sun.castShadow = true;
-    sun.shadow.mapSize.set(1024, 1024);
-    sun.shadow.camera.left = -100;
-    sun.shadow.camera.right = 100;
-    sun.shadow.camera.top = 100;
-    sun.shadow.camera.bottom = -100;
+    sun.shadow.mapSize.set(2048, 2048);
+    sun.shadow.camera.left = -200;
+    sun.shadow.camera.right = 200;
+    sun.shadow.camera.top = 200;
+    sun.shadow.camera.bottom = -200;
+    sun.shadow.camera.far = 400;
     scene.add(sun);
 
-    // ---------- GROUND ----------
-    const groundGeo = new THREE.PlaneGeometry(600, 600, 1, 1);
+    // ---------- GROUND (cobble plaza) ----------
+    const groundGeo = new THREE.PlaneGeometry(1200, 1200, 1, 1);
     const groundMat = new THREE.MeshStandardMaterial({
-      color: 0x2a2620,
+      color: 0x5a5650,
       roughness: 0.95,
     });
     const ground = new THREE.Mesh(groundGeo, groundMat);
@@ -155,7 +162,7 @@ export default function AnthemGame() {
         color,
         roughness: 0.85,
         emissive: opts.emissive ?? 0x000000,
-        emissiveIntensity: opts.emissive ? 0.6 : 0,
+        emissiveIntensity: opts.emissive ? 0.7 : 0,
       });
       const mesh = new THREE.Mesh(g, m);
       mesh.position.set(x, h / 2, z);
@@ -170,32 +177,146 @@ export default function AnthemGame() {
       return mesh;
     };
 
-    // ---------- ZONE 1: THE CITY (grey brutalist blocks) ----------
-    // central plaza around origin
-    for (let i = -3; i <= 3; i++) {
-      for (let j = -3; j <= 3; j++) {
-        if (Math.abs(i) < 2 && Math.abs(j) < 2) continue;
-        if (Math.random() > 0.55) continue;
-        const x = i * 9 + (Math.random() - 0.5) * 2;
-        const z = j * 9 + (Math.random() - 0.5) * 2;
-        const h = 6 + Math.random() * 10;
-        addBlock(x, z, 4 + Math.random() * 2, h, 4 + Math.random() * 2, 0x4a4438);
+    // Window decals for a building — emissive squares on a face
+    const addWindows = (
+      x: number,
+      z: number,
+      w: number,
+      h: number,
+      d: number,
+      face: "south" | "north" | "east" | "west",
+    ) => {
+      const cols = Math.max(2, Math.floor(w / 1.8));
+      const rows = Math.max(2, Math.floor(h / 2.2));
+      const winMat = new THREE.MeshStandardMaterial({
+        color: 0xffd98a,
+        emissive: 0xffc060,
+        emissiveIntensity: 0.9,
+      });
+      for (let i = 0; i < cols; i++) {
+        for (let j = 0; j < rows; j++) {
+          // sparsely lit
+          if (Math.random() > 0.55) continue;
+          const wx = -w / 2 + (i + 0.5) * (w / cols);
+          const wy = 1.2 + (j + 0.4) * ((h - 1.5) / rows);
+          const winGeo = new THREE.PlaneGeometry(0.7, 1.1);
+          const win = new THREE.Mesh(winGeo, winMat);
+          if (face === "south") {
+            win.position.set(x + wx, wy, z + d / 2 + 0.02);
+          } else if (face === "north") {
+            win.position.set(x + wx, wy, z - d / 2 - 0.02);
+            win.rotation.y = Math.PI;
+          } else if (face === "east") {
+            win.position.set(x + w / 2 + 0.02, wy, z + wx);
+            win.rotation.y = Math.PI / 2;
+          } else {
+            win.position.set(x - w / 2 - 0.02, wy, z + wx);
+            win.rotation.y = -Math.PI / 2;
+          }
+          scene.add(win);
+        }
+      }
+    };
+
+    // Deterministic pseudo-random for stable city layout
+    let rngSeed = 1337;
+    const rand = () => {
+      rngSeed = (rngSeed * 1664525 + 1013904223) >>> 0;
+      return (rngSeed & 0xffffff) / 0xffffff;
+    };
+
+    // ---------- ZONE 1: THE CITY — large dense brutalist grid ----------
+    // 11x11 grid, ~14 unit spacing, leaving a central plaza (3x3) and a north corridor toward the Council.
+    const greys = [0x6a6660, 0x55514a, 0x726c63, 0x4c4842, 0x605c54];
+    for (let i = -5; i <= 5; i++) {
+      for (let j = -5; j <= 5; j++) {
+        // central plaza
+        if (Math.abs(i) <= 1 && Math.abs(j) <= 1) continue;
+        // north corridor (toward the Council at -65)
+        if (i === 0 && j < -1) continue;
+        // south corridor (toward the field)
+        if (i === 0 && j > 1) continue;
+        // east corridor (toward the tunnel)
+        if (j === 0 && i > 1) continue;
+        // west corridor (toward the forest)
+        if (j === 0 && i < -1) continue;
+        const x = i * 14 + (rand() - 0.5) * 1.5;
+        const z = j * 14 + (rand() - 0.5) * 1.5;
+        const w = 7 + rand() * 4;
+        const d = 7 + rand() * 4;
+        const h = 9 + rand() * 18;
+        const c = greys[Math.floor(rand() * greys.length)];
+        addBlock(x, z, w, h, d, c);
+        // windows on the side facing the player corridors
+        const face: "south" | "north" | "east" | "west" =
+          j > 0 ? "north" : j < 0 ? "south" : i > 0 ? "west" : "east";
+        addWindows(x, z, w, h, d, face);
+        // rooftop block detail
+        if (rand() > 0.5) {
+          addBlock(x + (rand() - 0.5) * 2, z + (rand() - 0.5) * 2, 1.2, 1.5, 1.2, 0x3a342a, {
+            solid: false,
+          });
+          const m = scene.children[scene.children.length - 1] as THREE.Mesh;
+          m.position.y = h + 0.75;
+        }
       }
     }
-    // a big Council pillar to the north
-    addBlock(0, -28, 14, 20, 8, 0x3a342a);
-    // torches (small glowing blocks) on the council
-    const torchA = addBlock(-5, -23, 0.6, 0.6, 0.6, 0xffaa55, { emissive: 0xff7733, solid: false });
-    const torchB = addBlock(5, -23, 0.6, 0.6, 0.6, 0xffaa55, { emissive: 0xff7733, solid: false });
-    torchA.position.y = 4;
-    torchB.position.y = 4;
-    scene.add(new THREE.PointLight(0xffaa55, 1.2, 14)).position.set(-5, 4, -23);
-    scene.add(new THREE.PointLight(0xffaa55, 1.2, 14)).position.set(5, 4, -23);
+
+    // Street lamps along the corridors
+    const addLamp = (x: number, z: number) => {
+      addBlock(x, z, 0.25, 4, 0.25, 0x2a2620, { solid: false });
+      const bulb = new THREE.Mesh(
+        new THREE.SphereGeometry(0.35, 10, 10),
+        new THREE.MeshStandardMaterial({
+          color: 0xfff0c0,
+          emissive: 0xffc060,
+          emissiveIntensity: 1.4,
+        }),
+      );
+      bulb.position.set(x, 4.1, z);
+      scene.add(bulb);
+      const pl = new THREE.PointLight(0xffd58a, 0.9, 14);
+      pl.position.set(x, 4.1, z);
+      scene.add(pl);
+    };
+    for (let k = -4; k <= 4; k++) {
+      if (k === 0) continue;
+      addLamp(-3.5, k * 14);
+      addLamp(3.5, k * 14);
+      addLamp(k * 14, -3.5);
+      addLamp(k * 14, 3.5);
+    }
+
+    // ---------- COUNCIL HALL (far north) ----------
+    addBlock(0, -65, 28, 26, 14, 0x3a342a);
+    addBlock(0, -58, 30, 1, 1, 0x6a5d44, { solid: false }); // step
+    // pillars in front
+    for (let i = -2; i <= 2; i++) {
+      if (i === 0) continue;
+      addBlock(i * 4.5, -57, 1.2, 10, 1.2, 0x4a4438);
+    }
+    // brazier torches
+    const torchA = addBlock(-8, -58, 0.8, 0.8, 0.8, 0xffaa55, {
+      emissive: 0xff7733,
+      solid: false,
+    });
+    const torchB = addBlock(8, -58, 0.8, 0.8, 0.8, 0xffaa55, {
+      emissive: 0xff7733,
+      solid: false,
+    });
+    torchA.position.y = 4.5;
+    torchB.position.y = 4.5;
+    const tl1 = new THREE.PointLight(0xffaa55, 1.6, 22);
+    tl1.position.set(-8, 4.5, -58);
+    scene.add(tl1);
+    const tl2 = new THREE.PointLight(0xffaa55, 1.6, 22);
+    tl2.position.set(8, 4.5, -58);
+    scene.add(tl2);
 
     // ---------- TRANSITION: low wall with break leading south to field ----------
-    for (let x = -30; x <= 30; x += 4) {
-      if (Math.abs(x) < 4) continue;
-      addBlock(x, 25, 3.5, 2.5, 1.2, 0x3c362c);
+    for (let x = -40; x <= 40; x += 4) {
+      if (Math.abs(x) < 5) continue;
+      addBlock(x, 78, 3.5, 2.8, 1.2, 0x3c362c);
     }
 
     // ---------- ZONE 2: THE FIELD (south, golden grass) ----------
