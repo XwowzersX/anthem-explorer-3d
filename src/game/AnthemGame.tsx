@@ -97,41 +97,48 @@ export default function AnthemGame() {
 
     const mount = mountRef.current;
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x1a1814);
-    scene.fog = new THREE.Fog(0x1a1814, 25, 120);
+    // Pre-dawn sky — soft blue-grey
+    scene.background = new THREE.Color(0x8a9bb0);
+    scene.fog = new THREE.Fog(0x8a9bb0, 100, 320);
 
     const camera = new THREE.PerspectiveCamera(
       72,
       mount.clientWidth / mount.clientHeight,
       0.1,
-      400,
+      700,
     );
-    camera.position.set(0, 1.7, 0);
+    // Spawn inside the plaza, looking north toward the Council
+    camera.position.set(0, 1.7, 12);
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setSize(mount.clientWidth, mount.clientHeight);
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.05;
     mount.appendChild(renderer.domElement);
 
     // ---------- LIGHTING ----------
-    const hemi = new THREE.HemisphereLight(0xb8a37a, 0x1a1410, 0.45);
+    const hemi = new THREE.HemisphereLight(0xcfd3dc, 0x2a2a30, 0.95);
     scene.add(hemi);
-    const sun = new THREE.DirectionalLight(0xffd8a8, 0.7);
-    sun.position.set(40, 60, 20);
+    const ambient = new THREE.AmbientLight(0x6a6a70, 0.35);
+    scene.add(ambient);
+    const sun = new THREE.DirectionalLight(0xffe8c8, 1.1);
+    sun.position.set(80, 120, 40);
     sun.castShadow = true;
-    sun.shadow.mapSize.set(1024, 1024);
-    sun.shadow.camera.left = -100;
-    sun.shadow.camera.right = 100;
-    sun.shadow.camera.top = 100;
-    sun.shadow.camera.bottom = -100;
+    sun.shadow.mapSize.set(2048, 2048);
+    sun.shadow.camera.left = -200;
+    sun.shadow.camera.right = 200;
+    sun.shadow.camera.top = 200;
+    sun.shadow.camera.bottom = -200;
+    sun.shadow.camera.far = 400;
     scene.add(sun);
 
-    // ---------- GROUND ----------
-    const groundGeo = new THREE.PlaneGeometry(600, 600, 1, 1);
+    // ---------- GROUND (cobble plaza) ----------
+    const groundGeo = new THREE.PlaneGeometry(1200, 1200, 1, 1);
     const groundMat = new THREE.MeshStandardMaterial({
-      color: 0x2a2620,
+      color: 0x3a3631,
       roughness: 0.95,
     });
     const ground = new THREE.Mesh(groundGeo, groundMat);
@@ -155,7 +162,7 @@ export default function AnthemGame() {
         color,
         roughness: 0.85,
         emissive: opts.emissive ?? 0x000000,
-        emissiveIntensity: opts.emissive ? 0.6 : 0,
+        emissiveIntensity: opts.emissive ? 0.7 : 0,
       });
       const mesh = new THREE.Mesh(g, m);
       mesh.position.set(x, h / 2, z);
@@ -170,47 +177,160 @@ export default function AnthemGame() {
       return mesh;
     };
 
-    // ---------- ZONE 1: THE CITY (grey brutalist blocks) ----------
-    // central plaza around origin
-    for (let i = -3; i <= 3; i++) {
-      for (let j = -3; j <= 3; j++) {
-        if (Math.abs(i) < 2 && Math.abs(j) < 2) continue;
-        if (Math.random() > 0.55) continue;
-        const x = i * 9 + (Math.random() - 0.5) * 2;
-        const z = j * 9 + (Math.random() - 0.5) * 2;
-        const h = 6 + Math.random() * 10;
-        addBlock(x, z, 4 + Math.random() * 2, h, 4 + Math.random() * 2, 0x4a4438);
+    // Window decals for a building — emissive squares on a face
+    const addWindows = (
+      x: number,
+      z: number,
+      w: number,
+      h: number,
+      d: number,
+      face: "south" | "north" | "east" | "west",
+    ) => {
+      const cols = Math.max(2, Math.floor(w / 1.8));
+      const rows = Math.max(2, Math.floor(h / 2.2));
+      const winMat = new THREE.MeshStandardMaterial({
+        color: 0xffd98a,
+        emissive: 0xffc060,
+        emissiveIntensity: 0.9,
+      });
+      for (let i = 0; i < cols; i++) {
+        for (let j = 0; j < rows; j++) {
+          // sparsely lit
+          if (Math.random() > 0.55) continue;
+          const wx = -w / 2 + (i + 0.5) * (w / cols);
+          const wy = 1.2 + (j + 0.4) * ((h - 1.5) / rows);
+          const winGeo = new THREE.PlaneGeometry(0.7, 1.1);
+          const win = new THREE.Mesh(winGeo, winMat);
+          if (face === "south") {
+            win.position.set(x + wx, wy, z + d / 2 + 0.02);
+          } else if (face === "north") {
+            win.position.set(x + wx, wy, z - d / 2 - 0.02);
+            win.rotation.y = Math.PI;
+          } else if (face === "east") {
+            win.position.set(x + w / 2 + 0.02, wy, z + wx);
+            win.rotation.y = Math.PI / 2;
+          } else {
+            win.position.set(x - w / 2 - 0.02, wy, z + wx);
+            win.rotation.y = -Math.PI / 2;
+          }
+          scene.add(win);
+        }
+      }
+    };
+
+    // Deterministic pseudo-random for stable city layout
+    let rngSeed = 1337;
+    const rand = () => {
+      rngSeed = (rngSeed * 1664525 + 1013904223) >>> 0;
+      return (rngSeed & 0xffffff) / 0xffffff;
+    };
+
+    // Dark concrete tones — high contrast vs the sky
+    const greys = [0x2a2823, 0x35322c, 0x1f1d18, 0x403c34, 0x282520];
+    for (let i = -5; i <= 5; i++) {
+      for (let j = -5; j <= 5; j++) {
+        // central plaza
+        if (Math.abs(i) <= 1 && Math.abs(j) <= 1) continue;
+        // north corridor (toward the Council at -65)
+        if (i === 0 && j < -1) continue;
+        // south corridor (toward the field)
+        if (i === 0 && j > 1) continue;
+        // east corridor (toward the tunnel)
+        if (j === 0 && i > 1) continue;
+        // west corridor (toward the forest)
+        if (j === 0 && i < -1) continue;
+        const x = i * 14 + (rand() - 0.5) * 1.5;
+        const z = j * 14 + (rand() - 0.5) * 1.5;
+        const w = 7 + rand() * 4;
+        const d = 7 + rand() * 4;
+        const h = 9 + rand() * 18;
+        const c = greys[Math.floor(rand() * greys.length)];
+        addBlock(x, z, w, h, d, c);
+        // windows on the side facing the player corridors
+        const face: "south" | "north" | "east" | "west" =
+          j > 0 ? "north" : j < 0 ? "south" : i > 0 ? "west" : "east";
+        addWindows(x, z, w, h, d, face);
+        // rooftop block detail
+        if (rand() > 0.5) {
+          addBlock(x + (rand() - 0.5) * 2, z + (rand() - 0.5) * 2, 1.2, 1.5, 1.2, 0x3a342a, {
+            solid: false,
+          });
+          const m = scene.children[scene.children.length - 1] as THREE.Mesh;
+          m.position.y = h + 0.75;
+        }
       }
     }
-    // a big Council pillar to the north
-    addBlock(0, -28, 14, 20, 8, 0x3a342a);
-    // torches (small glowing blocks) on the council
-    const torchA = addBlock(-5, -23, 0.6, 0.6, 0.6, 0xffaa55, { emissive: 0xff7733, solid: false });
-    const torchB = addBlock(5, -23, 0.6, 0.6, 0.6, 0xffaa55, { emissive: 0xff7733, solid: false });
-    torchA.position.y = 4;
-    torchB.position.y = 4;
-    scene.add(new THREE.PointLight(0xffaa55, 1.2, 14)).position.set(-5, 4, -23);
-    scene.add(new THREE.PointLight(0xffaa55, 1.2, 14)).position.set(5, 4, -23);
+
+    // Street lamps along the corridors
+    const addLamp = (x: number, z: number) => {
+      addBlock(x, z, 0.25, 4, 0.25, 0x2a2620, { solid: false });
+      const bulb = new THREE.Mesh(
+        new THREE.SphereGeometry(0.35, 10, 10),
+        new THREE.MeshStandardMaterial({
+          color: 0xfff0c0,
+          emissive: 0xffc060,
+          emissiveIntensity: 1.4,
+        }),
+      );
+      bulb.position.set(x, 4.1, z);
+      scene.add(bulb);
+      const pl = new THREE.PointLight(0xffd58a, 0.9, 14);
+      pl.position.set(x, 4.1, z);
+      scene.add(pl);
+    };
+    for (let k = -4; k <= 4; k++) {
+      if (k === 0) continue;
+      addLamp(-3.5, k * 14);
+      addLamp(3.5, k * 14);
+      addLamp(k * 14, -3.5);
+      addLamp(k * 14, 3.5);
+    }
+
+    // ---------- COUNCIL HALL (far north) ----------
+    addBlock(0, -65, 28, 26, 14, 0x3a342a);
+    addBlock(0, -58, 30, 1, 1, 0x6a5d44, { solid: false }); // step
+    // pillars in front
+    for (let i = -2; i <= 2; i++) {
+      if (i === 0) continue;
+      addBlock(i * 4.5, -57, 1.2, 10, 1.2, 0x4a4438);
+    }
+    // brazier torches
+    const torchA = addBlock(-8, -58, 0.8, 0.8, 0.8, 0xffaa55, {
+      emissive: 0xff7733,
+      solid: false,
+    });
+    const torchB = addBlock(8, -58, 0.8, 0.8, 0.8, 0xffaa55, {
+      emissive: 0xff7733,
+      solid: false,
+    });
+    torchA.position.y = 4.5;
+    torchB.position.y = 4.5;
+    const tl1 = new THREE.PointLight(0xffaa55, 1.6, 22);
+    tl1.position.set(-8, 4.5, -58);
+    scene.add(tl1);
+    const tl2 = new THREE.PointLight(0xffaa55, 1.6, 22);
+    tl2.position.set(8, 4.5, -58);
+    scene.add(tl2);
 
     // ---------- TRANSITION: low wall with break leading south to field ----------
-    for (let x = -30; x <= 30; x += 4) {
-      if (Math.abs(x) < 4) continue;
-      addBlock(x, 25, 3.5, 2.5, 1.2, 0x3c362c);
+    for (let x = -40; x <= 40; x += 4) {
+      if (Math.abs(x) < 5) continue;
+      addBlock(x, 78, 3.5, 2.8, 1.2, 0x3c362c);
     }
 
     // ---------- ZONE 2: THE FIELD (south, golden grass) ----------
-    const fieldGeo = new THREE.PlaneGeometry(80, 80);
+    const fieldGeo = new THREE.PlaneGeometry(140, 140);
     const fieldMat = new THREE.MeshStandardMaterial({ color: 0x8a7a3a, roughness: 1 });
     const field = new THREE.Mesh(fieldGeo, fieldMat);
     field.rotation.x = -Math.PI / 2;
-    field.position.set(0, 0.02, 55);
+    field.position.set(0, 0.02, 130);
     scene.add(field);
     // tufts of grass
-    for (let i = 0; i < 120; i++) {
+    for (let i = 0; i < 220; i++) {
       const g = new THREE.ConeGeometry(0.3, 1.2, 5);
       const m = new THREE.MeshStandardMaterial({ color: 0xc8a84a });
       const tuft = new THREE.Mesh(g, m);
-      tuft.position.set((Math.random() - 0.5) * 70, 0.6, 30 + Math.random() * 50);
+      tuft.position.set((Math.random() - 0.5) * 120, 0.6, 85 + Math.random() * 90);
       scene.add(tuft);
     }
     // Liberty 5-3000 — a tall golden figure
@@ -227,36 +347,40 @@ export default function AnthemGame() {
     );
     head.position.y = 1.85;
     liberty.add(head);
-    liberty.position.set(8, 0, 60);
+    liberty.position.set(8, 0, 120);
     scene.add(liberty);
-    scene.add(new THREE.PointLight(0xffd070, 1.5, 12)).position.set(8, 2, 60);
+    const libLight = new THREE.PointLight(0xffd070, 1.8, 18);
+    libLight.position.set(8, 2, 120);
+    scene.add(libLight);
 
-    // ---------- ZONE 3: THE TUNNEL (east of city, down stairs into dim chamber) ----------
-    // grating marker
+    // ---------- ZONE 3: THE TUNNEL (far east) ----------
     const grate = new THREE.Mesh(
       new THREE.BoxGeometry(3, 0.1, 3),
-      new THREE.MeshStandardMaterial({ color: 0x222018, metalness: 0.7, roughness: 0.4 }),
+      new THREE.MeshStandardMaterial({
+        color: 0x3a3228,
+        metalness: 0.7,
+        roughness: 0.4,
+        emissive: 0x1a1208,
+        emissiveIntensity: 0.4,
+      }),
     );
-    grate.position.set(40, 0.05, 0);
+    grate.position.set(82, 0.05, 0);
     scene.add(grate);
-    // tunnel walls (a small underground room east further)
-    const tunnelGroup = new THREE.Group();
+    // tunnel chamber further east
     const tunFloor = new THREE.Mesh(
-      new THREE.PlaneGeometry(20, 14),
+      new THREE.PlaneGeometry(24, 16),
       new THREE.MeshStandardMaterial({ color: 0x1a1612, roughness: 1 }),
     );
     tunFloor.rotation.x = -Math.PI / 2;
-    tunFloor.position.set(60, 0.03, 0);
-    tunnelGroup.add(tunFloor);
-    // walls
+    tunFloor.position.set(108, 0.03, 0);
+    scene.add(tunFloor);
     [
-      [60, 0, -7, 20, 4, 0.5],
-      [60, 0, 7, 20, 4, 0.5],
-      [70, 0, 0, 0.5, 4, 14],
+      [108, 0, -8, 24, 5, 0.5],
+      [108, 0, 8, 24, 5, 0.5],
+      [120, 0, 0, 0.5, 5, 16],
     ].forEach(([x, , z, w, h, d]) => {
       addBlock(x, z, w, h, d, 0x2a2620);
     });
-    scene.add(tunnelGroup);
     // the LIGHT BOX — glowing pickup
     const lightBox = new THREE.Mesh(
       new THREE.BoxGeometry(0.6, 0.8, 0.6),
@@ -266,33 +390,33 @@ export default function AnthemGame() {
         emissiveIntensity: 1.5,
       }),
     );
-    lightBox.position.set(65, 0.9, 0);
+    lightBox.position.set(113, 0.9, 0);
     scene.add(lightBox);
-    const lightBoxLight = new THREE.PointLight(0xffeeaa, 2, 18);
-    lightBoxLight.position.set(65, 1.5, 0);
+    const lightBoxLight = new THREE.PointLight(0xffeeaa, 2.2, 24);
+    lightBoxLight.position.set(113, 1.5, 0);
     scene.add(lightBoxLight);
 
-    // ---------- ZONE 4: THE COUNCIL CHAMBER (north of the city, behind the big block) ----------
-    // a circle of pillars
+    // ---------- ZONE 4: COUNCIL CHAMBER (inside the Council hall area) ----------
     for (let i = 0; i < 8; i++) {
       const a = (i / 8) * Math.PI * 2;
-      const x = Math.cos(a) * 7;
-      const z = -50 + Math.sin(a) * 7;
-      addBlock(x, z, 1.2, 8, 1.2, 0x5a5040);
+      const x = Math.cos(a) * 8;
+      const z = -90 + Math.sin(a) * 8;
+      addBlock(x, z, 1.2, 9, 1.2, 0x5a5040);
     }
-    // central altar where the player presents the light
     const altar = new THREE.Mesh(
-      new THREE.BoxGeometry(2, 1.2, 2),
-      new THREE.MeshStandardMaterial({ color: 0x6a5a3a, emissive: 0x221810, emissiveIntensity: 0.4 }),
+      new THREE.BoxGeometry(2.4, 1.4, 2.4),
+      new THREE.MeshStandardMaterial({ color: 0x6a5a3a, emissive: 0x221810, emissiveIntensity: 0.5 }),
     );
-    altar.position.set(0, 0.6, -50);
+    altar.position.set(0, 0.7, -90);
     scene.add(altar);
-    scene.add(new THREE.PointLight(0xffaa66, 1, 18)).position.set(0, 4, -50);
+    const altarLight = new THREE.PointLight(0xffaa66, 1.4, 24);
+    altarLight.position.set(0, 4, -90);
+    scene.add(altarLight);
 
-    // ---------- ZONE 5: THE UNCHARTED FOREST (west, dark trees) ----------
-    for (let i = 0; i < 90; i++) {
-      const x = -40 - Math.random() * 80;
-      const z = (Math.random() - 0.5) * 100;
+    // ---------- ZONE 5: THE UNCHARTED FOREST (far west) ----------
+    for (let i = 0; i < 220; i++) {
+      const x = -90 - Math.random() * 110;
+      const z = (Math.random() - 0.5) * 180;
       const trunk = new THREE.Mesh(
         new THREE.CylinderGeometry(0.4, 0.5, 5 + Math.random() * 3, 6),
         new THREE.MeshStandardMaterial({ color: 0x231a12 }),
@@ -308,21 +432,20 @@ export default function AnthemGame() {
       colliders.push({ box: new THREE.Box3().setFromObject(trunk).expandByScalar(0.2) });
     }
 
-    // ---------- ZONE 6: THE HOUSE OF THE UNMENTIONABLE TIMES (far west) ----------
-    // colored glass house
+    // ---------- ZONE 6: THE HOUSE OF THE UNMENTIONABLE TIMES (deep west) ----------
     const houseGroup = new THREE.Group();
     const houseColors = [0x7a3a3a, 0x3a5a7a, 0x6a6a3a, 0x4a3a6a];
     [
-      [-100, 0, -10, 12, 6, 0.4],
-      [-100, 0, 10, 12, 6, 0.4],
-      [-106, 0, 0, 0.4, 6, 20],
-      [-94, 0, 0, 0.4, 6, 20],
+      [-200, 0, -10, 14, 7, 0.4],
+      [-200, 0, 10, 14, 7, 0.4],
+      [-207, 0, 0, 0.4, 7, 20],
+      [-193, 0, 0, 0.4, 7, 20],
     ].forEach(([x, , z, w, h, d], i) => {
       const g = new THREE.BoxGeometry(w, h, d);
       const m = new THREE.MeshStandardMaterial({
         color: houseColors[i],
         emissive: houseColors[i],
-        emissiveIntensity: 0.25,
+        emissiveIntensity: 0.35,
         transparent: true,
         opacity: 0.85,
       });
@@ -331,37 +454,40 @@ export default function AnthemGame() {
       houseGroup.add(mesh);
       colliders.push({ box: new THREE.Box3().setFromObject(mesh).expandByScalar(0.15) });
     });
-    // roof
     const roof = new THREE.Mesh(
-      new THREE.BoxGeometry(13, 0.3, 21),
+      new THREE.BoxGeometry(15, 0.3, 21),
       new THREE.MeshStandardMaterial({ color: 0x2a2018 }),
     );
-    roof.position.set(-100, 6.1, 0);
+    roof.position.set(-200, 7.1, 0);
     houseGroup.add(roof);
     scene.add(houseGroup);
-    scene.add(new THREE.PointLight(0xfff0c0, 1.5, 25)).position.set(-100, 4, 0);
+    const houseLight = new THREE.PointLight(0xfff0c0, 2, 30);
+    houseLight.position.set(-200, 4, 0);
+    scene.add(houseLight);
 
-    // The Book — the final pickup
+    // The Book — final pickup
     const bookGroup = new THREE.Group();
     const book = new THREE.Mesh(
       new THREE.BoxGeometry(0.8, 0.15, 1.0),
       new THREE.MeshStandardMaterial({
         color: 0xeeddaa,
         emissive: 0xffe8a0,
-        emissiveIntensity: 0.8,
+        emissiveIntensity: 0.9,
       }),
     );
     bookGroup.add(book);
-    bookGroup.position.set(-100, 1.2, 0);
+    bookGroup.position.set(-200, 1.2, 0);
     scene.add(bookGroup);
-    scene.add(new THREE.PointLight(0xffeebb, 2.5, 14)).position.set(-100, 2, 0);
+    const bookLight = new THREE.PointLight(0xffeebb, 2.8, 16);
+    bookLight.position.set(-200, 2, 0);
+    scene.add(bookLight);
 
     // ---------- INTERACTABLES (story beats anchored to world objects) ----------
     const interactables: Interactable[] = [
       {
         beatId: "start",
-        position: new THREE.Vector3(0, 1, 0),
-        mesh: addBlock(0, 0, 1.4, 0.4, 1.4, 0x6a5d44, { emissive: 0x2a1f10, solid: false }),
+        position: new THREE.Vector3(0, 1, 28),
+        mesh: addBlock(0, 0, 1.6, 0.5, 1.6, 0x8a7858, { emissive: 0x3a2a14, solid: false }),
         label: "Read the parchment",
         order: 0,
       },
@@ -395,14 +521,14 @@ export default function AnthemGame() {
       },
       {
         beatId: "forest",
-        position: new THREE.Vector3(-55, 1, 0),
-        mesh: addBlock(-55, 0, 1, 0.2, 1, 0x4a3a2a, { emissive: 0x1a1208, solid: false }),
+        position: new THREE.Vector3(-85, 1, 0),
+        mesh: addBlock(-85, 0, 1.2, 0.25, 1.2, 0x4a3a2a, { emissive: 0x1a1208, solid: false }),
         label: "Enter the Uncharted Forest",
         order: 5,
       },
       {
         beatId: "house",
-        position: new THREE.Vector3(-100, 1, 0),
+        position: new THREE.Vector3(-200, 1, 0),
         mesh: houseGroup,
         label: "Enter the glass house",
         order: 6,
