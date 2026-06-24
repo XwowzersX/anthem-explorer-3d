@@ -1,29 +1,19 @@
 import { createFileRoute } from "@tanstack/react-router";
+import AnthemGame from "@/game/AnthemGame";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Your App" },
-      { name: "description", content: "Replace this with a one-sentence description of your app." },
-      { property: "og:title", content: "Your App" },
-      { property: "og:description", content: "Replace this with a one-sentence description of your app." },
+      { title: "Anthem — A Journey Through Ayn Rand's Novella" },
+      { name: "description", content: "A 3D interactive walk through Anthem by Ayn Rand. Discover the tunnel, the light, the forest, and the sacred word." },
+      { property: "og:title", content: "Anthem — Interactive Story" },
+      { property: "og:description", content: "Speedrun the story of Equality 7-2521 in 15 minutes, or soak it in for 30." },
     ],
   }),
   component: Index,
+  ssr: false,
 });
 
-// IMPORTANT: Replace this placeholder. See ./README.md for routing conventions.
 function Index() {
-  return (
-    <div
-      className="flex min-h-screen items-center justify-center"
-      style={{ backgroundColor: "#fcfbf8" }}
-    >
-      <img
-        data-lovable-blank-page-placeholder="REMOVE_THIS"
-        src="https://cdn.gpteng.co/blank-app-v1.svg"
-        alt="Your app will live here!"
-      />
-    </div>
-  );
+  return <AnthemGame />;
 }
