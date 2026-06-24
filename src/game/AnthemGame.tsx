@@ -225,9 +225,8 @@ export default function AnthemGame() {
       return (rngSeed & 0xffffff) / 0xffffff;
     };
 
-    // ---------- ZONE 1: THE CITY — large dense brutalist grid ----------
-    // 11x11 grid, ~14 unit spacing, leaving a central plaza (3x3) and a north corridor toward the Council.
-    const greys = [0x6a6660, 0x55514a, 0x726c63, 0x4c4842, 0x605c54];
+    // Dark concrete tones — high contrast vs the sky
+    const greys = [0x2a2823, 0x35322c, 0x1f1d18, 0x403c34, 0x282520];
     for (let i = -5; i <= 5; i++) {
       for (let j = -5; j <= 5; j++) {
         // central plaza
