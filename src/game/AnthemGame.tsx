@@ -836,19 +836,25 @@ export default function AnthemGame() {
     };
     makeBeacon("start", -48, -48, 0xffcc66);
     makeBeacon("tunnel_entry", GRATE_X, GRATE_Z, 0xff8844);
-    makeBeacon("tunnel_light", 228, 0, 0xfff0aa);
     makeBeacon("field_meet", 20, 260, 0xffd070);
     makeBeacon("council", 0, -200, 0xffaa66);
     makeBeacon("forest", -220, 0, 0x88ffaa);
     makeBeacon("house", HX, HZ, 0xff88dd);
     makeBeacon("ego", HX, HZ - 4, 0xffffff);
+    // Underground beacon for the light box — only visible when in the tunnels
+    const ugBeacon = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.2, 0.2, 5, 8, 1, true),
+      new THREE.MeshBasicMaterial({ color: 0xfff0aa, transparent: true, opacity: 0.5, side: THREE.DoubleSide }),
+    );
+    ugBeacon.position.set(UG_OX, 2.5, -155);
+    undergroundGroup.add(ugBeacon);
 
     // =========================================================
     // INTERACTABLES
     // =========================================================
     const interactables: Interactable[] = [
       { beatId: "start", position: new THREE.Vector3(-48, 1, -45), mesh: parchmentTable, label: "Read the parchment", order: 0 },
-      { beatId: "tunnel_entry", position: new THREE.Vector3(GRATE_X, 1, GRATE_Z), mesh: grate, label: "Lift the iron grating", order: 1 },
+      // tunnel_entry (order 1) is handled specially by the grate (open + descend)
       { beatId: "tunnel_light", position: lightBox.position.clone(), mesh: lightBox, label: "Touch the light without fire", order: 2 },
       { beatId: "field_meet", position: liberty.position.clone(), mesh: liberty, label: "Approach the Golden One", order: 3 },
       { beatId: "council", position: altar.position.clone(), mesh: altar, label: "Present the light to the Council", order: 4 },
