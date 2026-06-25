@@ -912,6 +912,26 @@ export default function AnthemGame() {
       renderer.domElement.requestPointerLock();
     });
 
+    // ---------- UNDERGROUND STATE + COLLIDER SWAP ----------
+    let underground = false;
+    let activeColliders = colliders;
+    const gratePos = new THREE.Vector3(GRATE_X, 1, GRATE_Z);
+    const stairPos = new THREE.Vector3(UG_OX, 1, 5);
+
+    const descend = () => {
+      underground = true;
+      undergroundGroup.visible = true;
+      activeColliders = undergroundColliders;
+      camera.position.set(UG_OX, 1.7, 3);
+      yaw = Math.PI; // face -z toward the light box corridor (north)
+    };
+    const ascend = () => {
+      underground = false;
+      undergroundGroup.visible = false;
+      activeColliders = colliders;
+      camera.position.set(GRATE_X, 1.7, GRATE_Z + 5);
+    };
+
     // ---------- INTERACT ----------
     const tryInteract = () => {
       if (activeBeatRef.current) {
@@ -920,11 +940,34 @@ export default function AnthemGame() {
         return;
       }
       const p = camera.position;
+
+      // Special: iron grating (open) then descend
+      if (!underground && p.distanceTo(gratePos) < 5.5) {
+        if (!grateOpen && progressRef.current === 1) {
+          grateOpen = true;
+          const beat = STORY.find((b) => b.id === "tunnel_entry")!;
+          setActiveBeat(beat);
+          activeBeatRef.current = beat;
+          progressRef.current = 2;
+          setProgress(2);
+          setObjective(OBJECTIVES[2]);
+          return;
+        }
+        if (grateOpen) {
+          descend();
+          return;
+        }
+      }
+      // Special: stair back to surface (underground)
+      if (underground && p.distanceTo(stairPos) < 4) {
+        ascend();
+        return;
+      }
+
       let best: Interactable | null = null;
       let bestD = 5.5;
       for (const it of interactables) {
-        if (it.order < progressRef.current) continue;
-        if (it.order > progressRef.current) continue; // must be the next beat
+        if (it.order !== progressRef.current) continue;
         const d = p.distanceTo(it.position);
         if (d < bestD) {
           bestD = d;
@@ -937,17 +980,14 @@ export default function AnthemGame() {
         activeBeatRef.current = beat;
         progressRef.current = best.order + 1;
         setProgress(progressRef.current);
-        // unlock any gate that was waiting on this beat
         for (const g of gates) {
           if (!g.open && progressRef.current > g.unlockAfter) {
             g.open = true;
-            // remove collider + visually drop the door
             const idx = colliders.indexOf(g.collider);
             if (idx >= 0) colliders.splice(idx, 1);
             g.mesh.visible = false;
           }
         }
-        // advance objective
         if (best.order + 1 < OBJECTIVES.length) {
           setObjective(OBJECTIVES[best.order + 1]);
         } else {
@@ -995,7 +1035,7 @@ export default function AnthemGame() {
         new THREE.Vector3(next.x - 0.4, 0, camera.position.z - 0.4),
         new THREE.Vector3(next.x + 0.4, 2, camera.position.z + 0.4),
       );
-      if (!colliders.some((c) => c.box.intersectsBox(bx))) camera.position.x = next.x;
+      if (!activeColliders.some((c) => c.box.intersectsBox(bx))) camera.position.x = next.x;
 
       next.copy(camera.position);
       next.z += velocity.z;
@@ -1003,7 +1043,7 @@ export default function AnthemGame() {
         new THREE.Vector3(camera.position.x - 0.4, 0, next.z - 0.4),
         new THREE.Vector3(camera.position.x + 0.4, 2, next.z + 0.4),
       );
-      if (!colliders.some((c) => c.box.intersectsBox(bz))) camera.position.z = next.z;
+      if (!activeColliders.some((c) => c.box.intersectsBox(bz))) camera.position.z = next.z;
 
       camera.position.y = 1.7;
 
@@ -1020,25 +1060,48 @@ export default function AnthemGame() {
         const mat = g.mesh.material as THREE.MeshStandardMaterial;
         mat.emissiveIntensity = 0.4 + Math.sin(t * 2) * 0.25;
       }
-      // beacons: only show next objective's beacon
+      // grate slide animation
+      if (grateOpen && grateSlideT < 1) {
+        grateSlideT = Math.min(1, grateSlideT + dt * 1.2);
+        // slide east + sink slightly
+        grate.position.x = GRATE_X + grateSlideT * 4.2;
+        grate.position.y = 0.1 - grateSlideT * 0.05;
+        grate.rotation.z = grateSlideT * 0.08;
+      }
+
+      // beacons: only show next objective's beacon, and hide all when underground
       const nextBeatId = STORY[progressRef.current]?.id;
       for (const [id, m] of Object.entries(beaconForBeat)) {
-        m.visible = id === nextBeatId;
+        m.visible = !underground && id === nextBeatId;
       }
+      ugBeacon.visible = underground && nextBeatId === "tunnel_light";
 
       // nearby prompt
       let near: string | null = null;
-      let nd = 5.5;
-      for (const it of interactables) {
-        if (it.order !== progressRef.current) continue;
-        const d = camera.position.distanceTo(it.position);
-        if (d < nd) {
-          nd = d;
-          near = it.label;
+      // grate prompts (above ground)
+      if (!underground) {
+        const dg = camera.position.distanceTo(gratePos);
+        if (dg < 5.5) {
+          if (!grateOpen && progressRef.current === 1) near = "Lift the iron grating";
+          else if (grateOpen) near = "Descend into the tunnel";
+        }
+      } else {
+        const ds = camera.position.distanceTo(stairPos);
+        if (ds < 4) near = "Climb back to the surface";
+      }
+
+      if (!near) {
+        let nd = 5.5;
+        for (const it of interactables) {
+          if (it.order !== progressRef.current) continue;
+          const d = camera.position.distanceTo(it.position);
+          if (d < nd) {
+            nd = d;
+            near = it.label;
+          }
         }
       }
-      // show locked gate hint
-      if (!near) {
+      if (!near && !underground) {
         let gd = 6;
         for (const g of gates) {
           if (g.open) continue;
