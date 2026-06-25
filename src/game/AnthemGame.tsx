@@ -415,43 +415,245 @@ export default function AnthemGame() {
     scene.add(dormFill);
 
     // =========================================================
-    // 2) IRON GRATING — east edge of city, leading to TUNNEL room
+    // 2) IRON GRATING — east edge of city. Opens, then descends.
     // =========================================================
     const GRATE_X = 165, GRATE_Z = 0;
+    // stone rim around the grate
+    addBlock(GRATE_X - 2.3, 0, GRATE_Z, 0.6, 0.4, 5, 0x3a342a, { solid: false });
+    addBlock(GRATE_X + 2.3, 0, GRATE_Z, 0.6, 0.4, 5, 0x3a342a, { solid: false });
+    addBlock(GRATE_X, 0, GRATE_Z - 2.3, 5, 0.4, 0.6, 0x3a342a, { solid: false });
+    addBlock(GRATE_X, 0, GRATE_Z + 2.3, 5, 0.4, 0.6, 0x3a342a, { solid: false });
+    // dark shaft revealed when the grate slides aside
+    const shaftHole = new THREE.Mesh(
+      new THREE.PlaneGeometry(3.8, 3.8),
+      new THREE.MeshBasicMaterial({ color: 0x000000 }),
+    );
+    shaftHole.rotation.x = -Math.PI / 2;
+    shaftHole.position.set(GRATE_X, 0.04, GRATE_Z);
+    scene.add(shaftHole);
+    // the grate itself
     const grate = new THREE.Mesh(
-      new THREE.BoxGeometry(4, 0.12, 4),
+      new THREE.BoxGeometry(4, 0.18, 4),
       new THREE.MeshStandardMaterial({
         color: 0x3a3228, metalness: 0.7, roughness: 0.4,
         emissive: 0x2a1a08, emissiveIntensity: 0.6,
       }),
     );
-    grate.position.set(GRATE_X, 0.06, GRATE_Z);
+    grate.position.set(GRATE_X, 0.1, GRATE_Z);
     scene.add(grate);
+    let grateOpen = false;
+    let grateSlideT = 0;
     // beacon above
     const grateBeacon = new THREE.PointLight(0xff9050, 2.5, 60);
     grateBeacon.position.set(GRATE_X, 6, GRATE_Z);
     scene.add(grateBeacon);
 
-    // The tunnel chamber: a long stone room east of the grate
-    const tunnel = addBuilding(220, 0, 50, 7, 22, 0x1a1612, "west", 4, {
-      interiorColor: 0x141008,
-    });
-    // gate at tunnel entrance — locked until "tunnel_entry" is found
-    addGate(tunnel.doorX + 0.6, tunnel.cz, "ns", 4, 1, "Tunnel sealed — find the grating");
-    // light box inside
+    // =========================================================
+    // 2b) THE UNDERGROUND — a hidden network at a distant X offset
+    // =========================================================
+    const UG_OX = 3000;
+    const undergroundGroup = new THREE.Group();
+    scene.add(undergroundGroup);
+    const undergroundColliders: { box: THREE.Box3 }[] = [];
+
+    const ugAddCollider = (mesh: THREE.Mesh) => {
+      undergroundColliders.push({ box: new THREE.Box3().setFromObject(mesh).expandByScalar(0.15) });
+    };
+
+    // Build a corridor between two underground-local points, with rails + ties + lanterns.
+    const buildCorridor = (
+      x1: number, z1: number, x2: number, z2: number,
+      width = 6, height = 5,
+    ) => {
+      const dx = x2 - x1, dz = z2 - z1;
+      const len = Math.hypot(dx, dz);
+      const angle = Math.atan2(dz, dx);
+      const cx = (x1 + x2) / 2, cz = (z1 + z2) / 2;
+      // Floor
+      const floor = new THREE.Mesh(
+        new THREE.PlaneGeometry(len, width),
+        new THREE.MeshStandardMaterial({ color: 0x14110c, roughness: 1 }),
+      );
+      floor.rotation.x = -Math.PI / 2;
+      floor.rotation.z = -angle;
+      floor.position.set(UG_OX + cx, 0.02, cz);
+      undergroundGroup.add(floor);
+      // Ceiling
+      const ceil = new THREE.Mesh(
+        new THREE.PlaneGeometry(len, width),
+        new THREE.MeshStandardMaterial({ color: 0x0a0806, roughness: 1, side: THREE.DoubleSide }),
+      );
+      ceil.rotation.x = Math.PI / 2;
+      ceil.rotation.z = angle;
+      ceil.position.set(UG_OX + cx, height, cz);
+      undergroundGroup.add(ceil);
+      // Two walls
+      const nx = -Math.sin(angle), nz = Math.cos(angle);
+      const wallMat = new THREE.MeshStandardMaterial({ color: 0x1a1612, roughness: 1 });
+      for (const side of [-1, 1]) {
+        const wall = new THREE.Mesh(new THREE.BoxGeometry(len, height, 0.3), wallMat);
+        wall.position.set(UG_OX + cx + nx * (width / 2) * side, height / 2, cz + nz * (width / 2) * side);
+        wall.rotation.y = -angle;
+        undergroundGroup.add(wall);
+        ugAddCollider(wall);
+      }
+      // Rails (two parallel)
+      const railMat = new THREE.MeshStandardMaterial({
+        color: 0x6a5a48, metalness: 0.85, roughness: 0.35,
+        emissive: 0x1a1208, emissiveIntensity: 0.3,
+      });
+      for (const side of [-1, 1]) {
+        const rail = new THREE.Mesh(new THREE.BoxGeometry(len, 0.12, 0.12), railMat);
+        rail.position.set(UG_OX + cx + nx * 0.6 * side, 0.1, cz + nz * 0.6 * side);
+        rail.rotation.y = -angle;
+        undergroundGroup.add(rail);
+      }
+      // Wooden ties across the rails
+      const tieMat = new THREE.MeshStandardMaterial({ color: 0x2a1e12, roughness: 1 });
+      const tieCount = Math.max(2, Math.floor(len / 1.6));
+      for (let i = 0; i < tieCount; i++) {
+        const tx = -len / 2 + (i + 0.5) * (len / tieCount);
+        const tie = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.08, Math.min(width - 1, 2.2)), tieMat);
+        tie.position.set(UG_OX + cx + Math.cos(angle) * tx, 0.06, cz + Math.sin(angle) * tx);
+        tie.rotation.y = -angle;
+        undergroundGroup.add(tie);
+      }
+      // Hanging lanterns
+      const lanternCount = Math.max(2, Math.floor(len / 14));
+      for (let i = 0; i < lanternCount; i++) {
+        const tx = -len / 2 + (i + 0.5) * (len / lanternCount);
+        const lx = UG_OX + cx + Math.cos(angle) * tx;
+        const lz = cz + Math.sin(angle) * tx;
+        const lantern = new THREE.Mesh(
+          new THREE.SphereGeometry(0.28, 10, 10),
+          new THREE.MeshStandardMaterial({ color: 0xffc060, emissive: 0xffaa44, emissiveIntensity: 2.2 }),
+        );
+        lantern.position.set(lx, height - 0.5, lz);
+        undergroundGroup.add(lantern);
+        const pl = new THREE.PointLight(0xffaa55, 1.6, 18);
+        pl.position.set(lx, height - 0.5, lz);
+        undergroundGroup.add(pl);
+      }
+    };
+
+    // Junction chamber floor & ceiling
+    const junctionFloor = new THREE.Mesh(
+      new THREE.PlaneGeometry(14, 14),
+      new THREE.MeshStandardMaterial({ color: 0x14110c, roughness: 1 }),
+    );
+    junctionFloor.rotation.x = -Math.PI / 2;
+    junctionFloor.position.set(UG_OX, 0.02, 0);
+    undergroundGroup.add(junctionFloor);
+    const junctionCeil = new THREE.Mesh(
+      new THREE.PlaneGeometry(14, 14),
+      new THREE.MeshStandardMaterial({ color: 0x0a0806, side: THREE.DoubleSide }),
+    );
+    junctionCeil.rotation.x = Math.PI / 2;
+    junctionCeil.position.set(UG_OX, 5, 0);
+    undergroundGroup.add(junctionCeil);
+    // Junction corner walls (filling gaps between the 4 corridor entrances)
+    const jwMat = new THREE.MeshStandardMaterial({ color: 0x1a1612, roughness: 1 });
+    const jSegs: [number, number, number, number][] = [
+      [-5, -7, 4, 0.3], [5, -7, 4, 0.3],
+      [-5, 7, 4, 0.3], [5, 7, 4, 0.3],
+      [-7, -5, 0.3, 4], [-7, 5, 0.3, 4],
+      [7, -5, 0.3, 4], [7, 5, 0.3, 4],
+    ];
+    for (const [sx, sz, sw, sd] of jSegs) {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(sw, 5, sd), jwMat);
+      m.position.set(UG_OX + sx, 2.5, sz);
+      undergroundGroup.add(m);
+      ugAddCollider(m);
+    }
+    // Stair back to the surface — glowing pad at the junction
+    const stair = new THREE.Mesh(
+      new THREE.BoxGeometry(3, 0.25, 3),
+      new THREE.MeshStandardMaterial({ color: 0x6a5a3a, emissive: 0xffc060, emissiveIntensity: 0.9 }),
+    );
+    stair.position.set(UG_OX, 0.12, 5);
+    undergroundGroup.add(stair);
+    const stairLight = new THREE.PointLight(0xffd58a, 2.6, 22);
+    stairLight.position.set(UG_OX, 4, 5);
+    undergroundGroup.add(stairLight);
+
+    // The network — corridors radiate from the junction with branches
+    buildCorridor(0, -7, 0, -160, 6, 5);   // main north — leads to the light box
+    buildCorridor(0, 7, 0, 80, 6, 5);      // south
+    buildCorridor(-7, 0, -140, 0, 6, 5);   // west
+    buildCorridor(7, 0, 130, 0, 6, 5);     // east
+    // branches
+    buildCorridor(0, -80, -90, -80, 5, 5);
+    buildCorridor(0, -80, 90, -80, 5, 5);
+    buildCorridor(-140, 0, -140, -70, 5, 5);
+    buildCorridor(-140, 0, -140, 60, 5, 5);
+    buildCorridor(130, 0, 130, 80, 5, 5);
+    buildCorridor(0, 80, 60, 80, 5, 5);
+
+    // Dead-end details: broken minecart on rails
+    const cart = new THREE.Mesh(
+      new THREE.BoxGeometry(1.8, 1.1, 2.6),
+      new THREE.MeshStandardMaterial({ color: 0x2a1e12, roughness: 1 }),
+    );
+    cart.position.set(UG_OX + 60, 0.6, 0);
+    undergroundGroup.add(cart);
+    ugAddCollider(cart);
+    const cart2 = new THREE.Mesh(
+      new THREE.BoxGeometry(1.8, 1.1, 2.6),
+      new THREE.MeshStandardMaterial({ color: 0x2a1e12, roughness: 1 }),
+    );
+    cart2.position.set(UG_OX - 90, 0.6, 0);
+    cart2.rotation.y = 0.3;
+    undergroundGroup.add(cart2);
+    ugAddCollider(cart2);
+    // glowing crystals scattered in alcoves
+    for (let i = 0; i < 40; i++) {
+      const c = new THREE.Mesh(
+        new THREE.ConeGeometry(0.3, 1.3, 5),
+        new THREE.MeshStandardMaterial({ color: 0x88aaff, emissive: 0x4466cc, emissiveIntensity: 1.4 }),
+      );
+      // place near corridor walls
+      const corridorPicks = [
+        { x: 0, zMin: -160, zMax: -10, axis: "z" as const },
+        { x: 0, zMin: 10, zMax: 80, axis: "z" as const },
+        { z: 0, xMin: -140, xMax: -10, axis: "x" as const },
+        { z: 0, xMin: 10, xMax: 130, axis: "x" as const },
+      ];
+      const pick = corridorPicks[i % corridorPicks.length];
+      let lx = UG_OX, lz = 0;
+      if (pick.axis === "z") {
+        lx = UG_OX + (Math.random() < 0.5 ? -2.4 : 2.4);
+        lz = pick.zMin + Math.random() * (pick.zMax - pick.zMin);
+      } else {
+        lx = UG_OX + (pick.xMin + Math.random() * (pick.xMax - pick.xMin));
+        lz = Math.random() < 0.5 ? -2.4 : 2.4;
+      }
+      c.position.set(lx, 0.65, lz);
+      c.rotation.z = (Math.random() - 0.5) * 0.4;
+      undergroundGroup.add(c);
+    }
+
+    // The LIGHT BOX — far end of the north corridor
     const lightBox = new THREE.Mesh(
       new THREE.BoxGeometry(0.7, 0.9, 0.7),
-      new THREE.MeshStandardMaterial({ color: 0xfff8dd, emissive: 0xfff0aa, emissiveIntensity: 1.8 }),
+      new THREE.MeshStandardMaterial({ color: 0xfff8dd, emissive: 0xfff0aa, emissiveIntensity: 2.0 }),
     );
-    lightBox.position.set(228, 1.0, 0);
-    scene.add(lightBox);
-    const lightBoxLight = new THREE.PointLight(0xffeeaa, 3, 40);
-    lightBoxLight.position.set(228, 2, 0);
-    scene.add(lightBoxLight);
-    // tunnel ambient glow
-    const tunGlow = new THREE.PointLight(0xff8844, 0.8, 30);
-    tunGlow.position.set(212, 3, 0);
-    scene.add(tunGlow);
+    lightBox.position.set(UG_OX, 1.0, -155);
+    undergroundGroup.add(lightBox);
+    const lightBoxLight = new THREE.PointLight(0xffeeaa, 4, 60);
+    lightBoxLight.position.set(UG_OX, 2, -155);
+    undergroundGroup.add(lightBoxLight);
+    // small altar under the box
+    const lbAltar = new THREE.Mesh(
+      new THREE.BoxGeometry(1.4, 0.6, 1.4),
+      new THREE.MeshStandardMaterial({ color: 0x4a3a2a, roughness: 1 }),
+    );
+    lbAltar.position.set(UG_OX, 0.3, -155);
+    undergroundGroup.add(lbAltar);
+    // ambient underground glow
+    const ugAmbient = new THREE.AmbientLight(0x2a2018, 0.6);
+    undergroundGroup.add(ugAmbient);
+
+    undergroundGroup.visible = false;
 
     // =========================================================
     // 3) THE FIELD — south, beyond a low wall with a gap
