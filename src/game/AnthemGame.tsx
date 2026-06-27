@@ -960,16 +960,18 @@ export default function AnthemGame() {
     groups.surface.visible = false;
     groups.dorm.visible = true;
 
-    // Player starts on the exit pad facing the room (so first E exits)
-    camera.position.set(-D_W / 2 + 3.5, 1.7, 0);
+    // Player starts inside the dormitory near the cot.
+    // Camera lives in WORLD coords, so we add the scene's X offset.
+    camera.position.set(SCENE_OFFSETS.dorm + (-D_W / 2 + 5), 1.7, 0);
     let yaw = -Math.PI / 2;
     let pitch = 0;
 
+    // `spawn` is in LOCAL coords of the target scene; we add the offset here.
     const switchScene = (target: SceneKey, spawn: THREE.Vector3, yawNew: number) => {
       groups[currentScene].visible = false;
       currentScene = target;
       groups[target].visible = true;
-      camera.position.set(spawn.x, spawn.y, spawn.z);
+      camera.position.set(SCENE_OFFSETS[target] + spawn.x, spawn.y, spawn.z);
       yaw = yawNew;
     };
 
