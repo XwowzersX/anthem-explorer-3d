@@ -3,22 +3,30 @@ import * as THREE from "three";
 
 /**
  * ANTHEM — a semi-open 3D walk through Ayn Rand's novella.
- * Huge map, enterable buildings, gated doors. Each chapter unlocks
- * the next door, so you can wander freely between checkpoints.
+ *
+ * Architecture:
+ *   - One Three.js scene.
+ *   - The SURFACE world holds the city, fields, forest, and exterior
+ *     building shells. Each enterable building has only an exterior door
+ *     marker on the surface; you cannot walk inside on the surface map.
+ *   - Each INTERIOR is its own Group placed at a far X offset (so it
+ *     never collides with surface geometry) and is hidden by default.
+ *   - Pressing E at a door teleports you into that interior's group and
+ *     swaps the active collider list. Pressing E at the interior's exit
+ *     pad teleports you back to the surface in front of the door.
+ *
+ * This is the same trick the underground tunnel uses — now extended to
+ * the dormitory, council hall, and glass house.
  */
 
-type Beat = {
-  id: string;
-  title: string;
-  body: string;
-};
+type Beat = { id: string; title: string; body: string };
 
 const STORY: Beat[] = [
   {
     id: "start",
     title: "I. The Home of the Street Sweepers",
     body:
-      "“It is a sin to write this. It is a sin to think words no others think and to put them down upon a paper no others are to see.”\n\nYou are Equality 7-2521. You sleep in a long hall of one hundred beds. Step outside. Find the iron grating beyond the city — there is something the Councils do not wish you to see.",
+      "“It is a sin to write this. It is a sin to think words no others think and to put them down upon a paper no others are to see.”\n\nYou are Equality 7-2521. You sleep in a long hall of one hundred beds. Beneath your cot you have hidden a stub of candle and a sheaf of stolen paper. Take the parchment. Then step out into the street.",
   },
   {
     id: "tunnel_entry",
@@ -67,14 +75,32 @@ const STORY: Beat[] = [
 type Interactable = {
   beatId: string;
   position: THREE.Vector3;
-  mesh: THREE.Object3D;
   label: string;
   order: number;
+  sceneKey: SceneKey;
 };
 
-// A gated door: blocks the player until `unlockAfter` order is reached.
+type SceneKey = "surface" | "dorm" | "underground" | "council" | "house";
+
+type Door = {
+  /** Where the player stands on the surface to use this door */
+  surfacePos: THREE.Vector3;
+  /** Which interior it opens into */
+  target: SceneKey;
+  /** Where the player spawns inside that interior */
+  interiorSpawn: THREE.Vector3;
+  /** Facing yaw inside the interior */
+  interiorYaw: number;
+  /** Required progress to open (order index already completed) */
+  unlockAfter: number;
+  label: string;
+  lockedLabel: string;
+  /** Visible door mesh (for hiding when unlocked / open animations) */
+  mesh?: THREE.Mesh;
+};
+
 type Gate = {
-  unlockAfter: number; // order index that must be completed first
+  unlockAfter: number;
   collider: { box: THREE.Box3 };
   mesh: THREE.Mesh;
   open: boolean;
@@ -91,805 +117,872 @@ export default function AnthemGame() {
   const [nearby, setNearby] = useState<string | null>(null);
   const [elapsed, setElapsed] = useState(0);
   const [finished, setFinished] = useState(false);
-  const [objective, setObjective] = useState<string>("Step outside the dormitory");
+  const [objective, setObjective] = useState<string>("Take the parchment from beneath your cot");
 
   const progressRef = useRef(0);
   const activeBeatRef = useRef<Beat | null>(null);
 
   useEffect(() => {
     if (!started || !mountRef.current) return;
-
     const mount = mountRef.current;
+
+    // =====================================================================
+    // SCENE / RENDERER
+    // =====================================================================
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x8a9bb0);
-    scene.fog = new THREE.Fog(0x8a9bb0, 180, 700);
+    scene.fog = new THREE.Fog(0x8a9bb0, 120, 480);
 
-    const camera = new THREE.PerspectiveCamera(
-      74,
-      mount.clientWidth / mount.clientHeight,
-      0.1,
-      1500,
-    );
+    const camera = new THREE.PerspectiveCamera(74, mount.clientWidth / mount.clientHeight, 0.05, 900);
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
     renderer.setSize(mount.clientWidth, mount.clientHeight);
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.shadowMap.enabled = false; // perf: shadows were the biggest cost
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.05;
     mount.appendChild(renderer.domElement);
 
-    // ---------- LIGHTING ----------
-    scene.add(new THREE.HemisphereLight(0xcfd3dc, 0x2a2a30, 0.95));
-    scene.add(new THREE.AmbientLight(0x6a6a70, 0.35));
-    const sun = new THREE.DirectionalLight(0xffe8c8, 1.1);
-    sun.position.set(140, 220, 80);
-    sun.castShadow = true;
-    sun.shadow.mapSize.set(2048, 2048);
-    sun.shadow.camera.left = -400;
-    sun.shadow.camera.right = 400;
-    sun.shadow.camera.top = 400;
-    sun.shadow.camera.bottom = -400;
-    sun.shadow.camera.far = 800;
-    scene.add(sun);
+    // =====================================================================
+    // SCENE GROUPS — one per "map". Only the active one is visible.
+    // =====================================================================
+    const SCENE_OFFSETS: Record<SceneKey, number> = {
+      surface: 0,
+      dorm: 2000,
+      underground: 4000,
+      council: 6000,
+      house: 8000,
+    };
 
-    // ---------- GROUND ----------
-    const ground = new THREE.Mesh(
-      new THREE.PlaneGeometry(3000, 3000),
-      new THREE.MeshStandardMaterial({ color: 0x3a3631, roughness: 0.95 }),
-    );
-    ground.rotation.x = -Math.PI / 2;
-    ground.receiveShadow = true;
-    scene.add(ground);
+    const groups: Record<SceneKey, THREE.Group> = {
+      surface: new THREE.Group(),
+      dorm: new THREE.Group(),
+      underground: new THREE.Group(),
+      council: new THREE.Group(),
+      house: new THREE.Group(),
+    };
+    for (const k of Object.keys(groups) as SceneKey[]) {
+      groups[k].position.x = SCENE_OFFSETS[k];
+      scene.add(groups[k]);
+      groups[k].visible = k === "surface";
+    }
 
-    // ---------- COLLIDERS & HELPERS ----------
-    const colliders: { box: THREE.Box3 }[] = [];
-    const gates: Gate[] = [];
+    const colliderSets: Record<SceneKey, { box: THREE.Box3 }[]> = {
+      surface: [],
+      dorm: [],
+      underground: [],
+      council: [],
+      house: [],
+    };
 
-    const addBlock = (
-      x: number,
-      y: number,
-      z: number,
-      w: number,
-      h: number,
-      d: number,
-      color: number,
-      opts: { solid?: boolean; emissive?: number; emissiveIntensity?: number; roughness?: number } = {},
+    // =====================================================================
+    // SHARED MATERIALS (huge perf win — one material instead of hundreds)
+    // =====================================================================
+    const M = {
+      stone: new THREE.MeshLambertMaterial({ color: 0x2a2823 }),
+      stone2: new THREE.MeshLambertMaterial({ color: 0x35322c }),
+      stone3: new THREE.MeshLambertMaterial({ color: 0x1f1d18 }),
+      stone4: new THREE.MeshLambertMaterial({ color: 0x403c34 }),
+      cobble: new THREE.MeshLambertMaterial({ color: 0x3a3631 }),
+      wood: new THREE.MeshLambertMaterial({ color: 0x3a2a18 }),
+      woodDark: new THREE.MeshLambertMaterial({ color: 0x231811 }),
+      plaster: new THREE.MeshLambertMaterial({ color: 0x6a5e48 }),
+      plasterDark: new THREE.MeshLambertMaterial({ color: 0x4a4030 }),
+      roof: new THREE.MeshLambertMaterial({ color: 0x1f1c17 }),
+      door: new THREE.MeshStandardMaterial({
+        color: 0x4a3a20, emissive: 0xff8030, emissiveIntensity: 0.45,
+        metalness: 0.35, roughness: 0.65,
+      }),
+      doorWood: new THREE.MeshStandardMaterial({
+        color: 0x3a2614, emissive: 0xffa050, emissiveIntensity: 0.35, roughness: 0.85,
+      }),
+      window: new THREE.MeshBasicMaterial({ color: 0xffd98a }),
+      fire: new THREE.MeshBasicMaterial({ color: 0xff7733 }),
+      candle: new THREE.MeshBasicMaterial({ color: 0xfff0aa }),
+      ironGrate: new THREE.MeshStandardMaterial({
+        color: 0x3a3228, metalness: 0.7, roughness: 0.4,
+        emissive: 0x2a1a08, emissiveIntensity: 0.6,
+      }),
+      tunnelWall: new THREE.MeshLambertMaterial({ color: 0x1a1612 }),
+      tunnelFloor: new THREE.MeshLambertMaterial({ color: 0x14110c }),
+      tunnelCeil: new THREE.MeshLambertMaterial({ color: 0x0a0806 }),
+      lantern: new THREE.MeshBasicMaterial({ color: 0xffc060 }),
+      cloth: new THREE.MeshLambertMaterial({ color: 0xc8b890 }),
+      bedFrame: new THREE.MeshLambertMaterial({ color: 0x2a1e12 }),
+      rail: new THREE.MeshStandardMaterial({
+        color: 0x6a5a48, metalness: 0.85, roughness: 0.35,
+      }),
+      grass: new THREE.MeshLambertMaterial({ color: 0x8a7a3a }),
+      tuft: new THREE.MeshLambertMaterial({ color: 0xc8a84a }),
+      trunk: new THREE.MeshLambertMaterial({ color: 0x231a12 }),
+      leaves: new THREE.MeshLambertMaterial({ color: 0x1e3a22 }),
+      glassR: new THREE.MeshStandardMaterial({ color: 0x7a3a3a, emissive: 0x6a2828, emissiveIntensity: 0.4, transparent: true, opacity: 0.85 }),
+      glassB: new THREE.MeshStandardMaterial({ color: 0x3a5a7a, emissive: 0x284060, emissiveIntensity: 0.4, transparent: true, opacity: 0.85 }),
+      glassG: new THREE.MeshStandardMaterial({ color: 0x4a6a3a, emissive: 0x305028, emissiveIntensity: 0.4, transparent: true, opacity: 0.85 }),
+      glassY: new THREE.MeshStandardMaterial({ color: 0xb89a3a, emissive: 0x806020, emissiveIntensity: 0.5, transparent: true, opacity: 0.85 }),
+      mirror: new THREE.MeshStandardMaterial({ color: 0xddddee, emissive: 0x88aacc, emissiveIntensity: 0.3, metalness: 0.6, roughness: 0.2 }),
+      gold: new THREE.MeshStandardMaterial({ color: 0xeeddaa, emissive: 0xffe8a0, emissiveIntensity: 1.0 }),
+      altar: new THREE.MeshStandardMaterial({ color: 0x6a5a3a, emissive: 0x221810, emissiveIntensity: 0.5 }),
+      altarStone: new THREE.MeshLambertMaterial({ color: 0x55504a }),
+      pillar: new THREE.MeshLambertMaterial({ color: 0x5a5040 }),
+      pillarDark: new THREE.MeshLambertMaterial({ color: 0x4a4438 }),
+      exitPad: new THREE.MeshStandardMaterial({ color: 0x6a5a3a, emissive: 0xffc060, emissiveIntensity: 1.1 }),
+    };
+
+    // Shared geometries
+    const G = {
+      bedFrame: new THREE.BoxGeometry(2, 0.45, 4.2),
+      bedMattress: new THREE.BoxGeometry(1.9, 0.25, 4.0),
+      pillow: new THREE.BoxGeometry(1.6, 0.15, 0.9),
+      lamp: new THREE.SphereGeometry(0.22, 8, 6),
+      tieBeam: new THREE.BoxGeometry(0.3, 0.4, 6),
+    };
+
+    // =====================================================================
+    // HELPERS
+    // =====================================================================
+    const sceneAdd = (key: SceneKey, obj: THREE.Object3D) => groups[key].add(obj);
+
+    const addBox = (
+      key: SceneKey,
+      x: number, y: number, z: number, w: number, h: number, d: number,
+      mat: THREE.Material,
+      solid = true,
     ) => {
-      const mesh = new THREE.Mesh(
-        new THREE.BoxGeometry(w, h, d),
-        new THREE.MeshStandardMaterial({
-          color,
-          roughness: opts.roughness ?? 0.85,
-          emissive: opts.emissive ?? 0x000000,
-          emissiveIntensity: opts.emissive ? (opts.emissiveIntensity ?? 0.6) : 0,
-        }),
-      );
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
       mesh.position.set(x, y + h / 2, z);
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
-      scene.add(mesh);
-      if (opts.solid !== false) {
-        const box = new THREE.Box3().setFromObject(mesh).expandByScalar(0.15);
-        colliders.push({ box });
+      sceneAdd(key, mesh);
+      if (solid) {
+        // Collider in LOCAL coordinates of the group (we'll test against the
+        // player's local position inside the active group).
+        const box = new THREE.Box3().setFromObject(mesh).expandByScalar(0.12);
+        // Strip the group's X offset back out — colliders are local.
+        const ox = SCENE_OFFSETS[key];
+        box.min.x -= ox; box.max.x -= ox;
+        colliderSets[key].push({ box });
       }
       return mesh;
     };
 
-    // A hollow building: 4 walls (with a door gap on one side), floor, roof.
-    // Returns interior center for placing things inside.
+    /** Hollow building shell with a door gap. Returns door world coords + interior center. */
     const addBuilding = (
-      cx: number,
-      cz: number,
-      w: number,
-      h: number,
-      d: number,
-      wallColor: number,
+      key: SceneKey,
+      cx: number, cz: number, w: number, h: number, d: number,
+      wallMat: THREE.Material,
       doorSide: "south" | "north" | "east" | "west",
       doorWidth: number,
-      opts: { interiorColor?: number; roof?: boolean; emissiveWindows?: boolean } = {},
+      addRoof = true,
+      roofMat: THREE.Material = M.roof,
     ) => {
-      const t = 0.4; // wall thickness
-      // Floor interior tile
-      const floor = new THREE.Mesh(
-        new THREE.PlaneGeometry(w - t * 2, d - t * 2),
-        new THREE.MeshStandardMaterial({
-          color: opts.interiorColor ?? 0x4a4238,
-          roughness: 0.9,
-        }),
-      );
-      floor.rotation.x = -Math.PI / 2;
-      floor.position.set(cx, 0.03, cz);
-      scene.add(floor);
+      const t = 0.4;
+      const seg = (x: number, z: number, ww: number, hh: number, dd: number) =>
+        addBox(key, x, 0, z, ww, hh, dd, wallMat, true);
 
-      // helper to add a wall segment with collider
-      const wall = (x: number, z: number, ww: number, hh: number, dd: number) => {
-        addBlock(x, 0, z, ww, hh, dd, wallColor, { emissive: opts.emissiveWindows ? 0x1a1408 : 0 });
-      };
-
-      // South wall (z = cz + d/2)
       if (doorSide === "south") {
-        const sideLen = (w - doorWidth) / 2;
-        wall(cx - (doorWidth / 2 + sideLen / 2), cz + d / 2, sideLen, h, t);
-        wall(cx + (doorWidth / 2 + sideLen / 2), cz + d / 2, sideLen, h, t);
-        // lintel
-        addBlock(cx, h - 0.8, cz + d / 2, doorWidth, 1.2, t, wallColor);
-      } else {
-        wall(cx, cz + d / 2, w, h, t);
-      }
-      // North wall
+        const s = (w - doorWidth) / 2;
+        seg(cx - (doorWidth / 2 + s / 2), cz + d / 2, s, h, t);
+        seg(cx + (doorWidth / 2 + s / 2), cz + d / 2, s, h, t);
+        addBox(key, cx, h - 0.8, cz + d / 2, doorWidth, 1.2, t, wallMat, false);
+      } else seg(cx, cz + d / 2, w, h, t);
+
       if (doorSide === "north") {
-        const sideLen = (w - doorWidth) / 2;
-        wall(cx - (doorWidth / 2 + sideLen / 2), cz - d / 2, sideLen, h, t);
-        wall(cx + (doorWidth / 2 + sideLen / 2), cz - d / 2, sideLen, h, t);
-        addBlock(cx, h - 0.8, cz - d / 2, doorWidth, 1.2, t, wallColor);
-      } else {
-        wall(cx, cz - d / 2, w, h, t);
-      }
-      // East wall
+        const s = (w - doorWidth) / 2;
+        seg(cx - (doorWidth / 2 + s / 2), cz - d / 2, s, h, t);
+        seg(cx + (doorWidth / 2 + s / 2), cz - d / 2, s, h, t);
+        addBox(key, cx, h - 0.8, cz - d / 2, doorWidth, 1.2, t, wallMat, false);
+      } else seg(cx, cz - d / 2, w, h, t);
+
       if (doorSide === "east") {
-        const sideLen = (d - doorWidth) / 2;
-        wall(cx + w / 2, cz - (doorWidth / 2 + sideLen / 2), t, h, sideLen);
-        wall(cx + w / 2, cz + (doorWidth / 2 + sideLen / 2), t, h, sideLen);
-        addBlock(cx + w / 2, h - 0.8, cz, t, 1.2, doorWidth, wallColor);
-      } else {
-        wall(cx + w / 2, cz, t, h, d);
-      }
-      // West wall
+        const s = (d - doorWidth) / 2;
+        seg(cx + w / 2, cz - (doorWidth / 2 + s / 2), t, h, s);
+        seg(cx + w / 2, cz + (doorWidth / 2 + s / 2), t, h, s);
+        addBox(key, cx + w / 2, h - 0.8, cz, t, 1.2, doorWidth, wallMat, false);
+      } else seg(cx + w / 2, cz, t, h, d);
+
       if (doorSide === "west") {
-        const sideLen = (d - doorWidth) / 2;
-        wall(cx - w / 2, cz - (doorWidth / 2 + sideLen / 2), t, h, sideLen);
-        wall(cx - w / 2, cz + (doorWidth / 2 + sideLen / 2), t, h, sideLen);
-        addBlock(cx - w / 2, h - 0.8, cz, t, 1.2, doorWidth, wallColor);
-      } else {
-        wall(cx - w / 2, cz, t, h, d);
+        const s = (d - doorWidth) / 2;
+        seg(cx - w / 2, cz - (doorWidth / 2 + s / 2), t, h, s);
+        seg(cx - w / 2, cz + (doorWidth / 2 + s / 2), t, h, s);
+        addBox(key, cx - w / 2, h - 0.8, cz, t, 1.2, doorWidth, wallMat, false);
+      } else seg(cx - w / 2, cz, t, h, d);
+
+      if (addRoof) {
+        const r = new THREE.Mesh(new THREE.BoxGeometry(w + 0.3, 0.4, d + 0.3), roofMat);
+        r.position.set(cx, h + 0.2, cz);
+        sceneAdd(key, r);
       }
 
-      if (opts.roof !== false) {
-        const roof = new THREE.Mesh(
-          new THREE.BoxGeometry(w + 0.3, 0.4, d + 0.3),
-          new THREE.MeshStandardMaterial({ color: 0x1f1c17, roughness: 1 }),
-        );
-        roof.position.set(cx, h + 0.2, cz);
-        scene.add(roof);
-      }
-
-      // door position (world coords)
-      let doorX = cx, doorZ = cz;
-      if (doorSide === "south") doorZ = cz + d / 2;
-      if (doorSide === "north") doorZ = cz - d / 2;
-      if (doorSide === "east") doorX = cx + w / 2;
-      if (doorSide === "west") doorX = cx - w / 2;
-      return { doorX, doorZ, cx, cz, w, h, d };
+      let dx = cx, dz = cz;
+      if (doorSide === "south") dz = cz + d / 2;
+      if (doorSide === "north") dz = cz - d / 2;
+      if (doorSide === "east") dx = cx + w / 2;
+      if (doorSide === "west") dx = cx - w / 2;
+      return { doorX: dx, doorZ: dz };
     };
 
-    // A door that blocks the player until a chapter unlocks it.
-    const addGate = (
-      x: number,
-      z: number,
-      orient: "ns" | "ew",
-      doorWidth: number,
-      unlockAfter: number,
-      label: string,
-    ) => {
-      const w = orient === "ns" ? doorWidth : 0.5;
-      const d = orient === "ns" ? 0.5 : doorWidth;
-      const mesh = new THREE.Mesh(
-        new THREE.BoxGeometry(w, 3.4, d),
-        new THREE.MeshStandardMaterial({
-          color: 0x4a3a20,
-          emissive: 0xff8030,
-          emissiveIntensity: 0.5,
-          metalness: 0.4,
-          roughness: 0.6,
-        }),
-      );
-      mesh.position.set(x, 1.7, z);
-      scene.add(mesh);
-      const box = new THREE.Box3().setFromObject(mesh).expandByScalar(0.1);
-      const collider = { box };
-      colliders.push(collider);
-      gates.push({ unlockAfter, collider, mesh, open: false, label, position: new THREE.Vector3(x, 1.7, z) });
+    // Floor tile (non-solid)
+    const addFloor = (key: SceneKey, cx: number, cz: number, w: number, d: number, mat: THREE.Material) => {
+      const f = new THREE.Mesh(new THREE.PlaneGeometry(w, d), mat);
+      f.rotation.x = -Math.PI / 2;
+      f.position.set(cx, 0.02, cz);
+      sceneAdd(key, f);
+      return f;
     };
 
     // Deterministic RNG
-    let rngSeed = 1337;
-    const rand = () => {
-      rngSeed = (rngSeed * 1664525 + 1013904223) >>> 0;
-      return (rngSeed & 0xffffff) / 0xffffff;
-    };
+    let rs = 1337;
+    const rand = () => { rs = (rs * 1664525 + 1013904223) >>> 0; return (rs & 0xffffff) / 0xffffff; };
 
-    // =========================================================
-    // THE CITY — huge dense grid, with corridors carved out
-    // =========================================================
-    const greys = [0x2a2823, 0x35322c, 0x1f1d18, 0x403c34, 0x282520, 0x312d27];
-    const GRID = 9; // 19x19
+    // =====================================================================
+    // SURFACE — LIGHTING
+    // =====================================================================
+    scene.add(new THREE.HemisphereLight(0xcfd3dc, 0x2a2a30, 1.0));
+    scene.add(new THREE.AmbientLight(0x6a6a70, 0.45));
+    const sun = new THREE.DirectionalLight(0xffe8c8, 0.95);
+    sun.position.set(140, 220, 80);
+    scene.add(sun);
+
+    // =====================================================================
+    // SURFACE — GROUND
+    // =====================================================================
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(2400, 2400), M.cobble);
+    ground.rotation.x = -Math.PI / 2;
+    sceneAdd("surface", ground);
+
+    // =====================================================================
+    // SURFACE — THE CITY (denser-feeling but cheaper)
+    // =====================================================================
+    const stoneMats = [M.stone, M.stone2, M.stone3, M.stone4];
+    const GRID = 7; // 15x15
     for (let i = -GRID; i <= GRID; i++) {
       for (let j = -GRID; j <= GRID; j++) {
-        // central plaza
-        if (Math.abs(i) <= 1 && Math.abs(j) <= 1) continue;
-        // N/S/E/W boulevards
-        if (Math.abs(i) <= 1) continue;
-        if (Math.abs(j) <= 1) continue;
-        // skip slots where story buildings sit
+        if (Math.abs(i) <= 1 && Math.abs(j) <= 1) continue; // plaza
+        if (Math.abs(i) <= 1) continue; // N/S boulevard
+        if (Math.abs(j) <= 1) continue; // E/W boulevard
+        // Reserve slots
         if (i === -3 && j === -3) continue; // dormitory
-        if (i === 5 && j === 0) continue; // (corridor already skipped)
-        const x = i * 16 + (rand() - 0.5) * 1.5;
-        const z = j * 16 + (rand() - 0.5) * 1.5;
+        if (i === 0 && j === -6) continue; // council
+        const x = i * 17 + (rand() - 0.5) * 1.4;
+        const z = j * 17 + (rand() - 0.5) * 1.4;
         const w = 9 + rand() * 5;
         const dd = 9 + rand() * 5;
-        const h = 11 + rand() * 26;
-        const c = greys[Math.floor(rand() * greys.length)];
-        addBlock(x, 0, z, w, h, dd, c);
-        // rooftop detail
-        if (rand() > 0.45) {
-          addBlock(x + (rand() - 0.5) * 2, h, z + (rand() - 0.5) * 2, 1.4, 1.8, 1.4, 0x3a342a, { solid: false });
-        }
-        // lit windows on the side facing nearest boulevard
+        const h = 10 + rand() * 24;
+        addBox("surface", x, 0, z, w, h, dd, stoneMats[Math.floor(rand() * 4)]);
+        // window strip (single quad, much cheaper than many small ones)
         if (rand() > 0.4) {
-          const winMat = new THREE.MeshStandardMaterial({
-            color: 0xffd98a,
-            emissive: 0xffc060,
-            emissiveIntensity: 1.0,
-          });
-          const face: "south" | "north" | "east" | "west" =
-            j > 0 ? "north" : j < 0 ? "south" : i > 0 ? "west" : "east";
-          const cols = 2 + Math.floor(rand() * 3);
-          const rows = 3 + Math.floor(rand() * 4);
-          for (let a = 0; a < cols; a++) {
-            for (let b = 0; b < rows; b++) {
-              if (rand() > 0.55) continue;
-              const wx = -w / 2 + (a + 0.5) * (w / cols);
-              const wy = 2 + (b + 0.5) * ((h - 3) / rows);
-              const win = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 1.1), winMat);
-              if (face === "south") { win.position.set(x + wx, wy, z + dd / 2 + 0.02); }
-              else if (face === "north") { win.position.set(x + wx, wy, z - dd / 2 - 0.02); win.rotation.y = Math.PI; }
-              else if (face === "east") { win.position.set(x + w / 2 + 0.02, wy, z + wx); win.rotation.y = Math.PI / 2; }
-              else { win.position.set(x - w / 2 - 0.02, wy, z + wx); win.rotation.y = -Math.PI / 2; }
-              scene.add(win);
-            }
-          }
+          const face = j > 0 ? "north" : j < 0 ? "south" : i > 0 ? "west" : "east";
+          const win = new THREE.Mesh(new THREE.PlaneGeometry(w * 0.55, h * 0.5), M.window);
+          if (face === "south") { win.position.set(x, h * 0.45, z + dd / 2 + 0.03); }
+          else if (face === "north") { win.position.set(x, h * 0.45, z - dd / 2 - 0.03); win.rotation.y = Math.PI; }
+          else if (face === "east") { win.position.set(x + w / 2 + 0.03, h * 0.45, z); win.rotation.y = Math.PI / 2; }
+          else { win.position.set(x - w / 2 - 0.03, h * 0.45, z); win.rotation.y = -Math.PI / 2; }
+          sceneAdd("surface", win);
         }
       }
     }
 
-    // Street lamps along the four boulevards
-    const addLamp = (x: number, z: number) => {
-      addBlock(x, 0, z, 0.3, 4.5, 0.3, 0x2a2620, { solid: false });
-      const bulb = new THREE.Mesh(
-        new THREE.SphereGeometry(0.4, 10, 10),
-        new THREE.MeshStandardMaterial({ color: 0xfff0c0, emissive: 0xffc060, emissiveIntensity: 1.6 }),
-      );
-      bulb.position.set(x, 4.6, z);
-      scene.add(bulb);
-      const pl = new THREE.PointLight(0xffd58a, 1.1, 18);
-      pl.position.set(x, 4.6, z);
-      scene.add(pl);
-    };
+    // Lamps along boulevards — emissive only (no PointLights, perf)
     for (let k = -GRID; k <= GRID; k++) {
       if (k === 0) continue;
-      addLamp(-5, k * 16);
-      addLamp(5, k * 16);
-      addLamp(k * 16, -5);
-      addLamp(k * 16, 5);
+      for (const [lx, lz] of [[-5, k * 17], [5, k * 17], [k * 17, -5], [k * 17, 5]] as const) {
+        addBox("surface", lx, 0, lz, 0.3, 4.5, 0.3, M.bedFrame, false);
+        const b = new THREE.Mesh(G.lamp, M.lantern);
+        b.position.set(lx, 4.6, lz);
+        sceneAdd("surface", b);
+      }
     }
-    // central plaza fire pit
-    const fire = new THREE.Mesh(
-      new THREE.CylinderGeometry(1.2, 1.4, 0.6, 16),
-      new THREE.MeshStandardMaterial({ color: 0xff7733, emissive: 0xff4400, emissiveIntensity: 1.4 }),
-    );
+    // Central plaza fire — one real light
+    const fire = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.4, 0.6, 12), M.fire);
     fire.position.set(0, 0.3, 0);
-    scene.add(fire);
-    const fireLight = new THREE.PointLight(0xff7733, 2.5, 40);
+    sceneAdd("surface", fire);
+    const fireLight = new THREE.PointLight(0xff7733, 2.2, 50);
     fireLight.position.set(0, 2, 0);
-    scene.add(fireLight);
+    sceneAdd("surface", fireLight);
 
-    // =========================================================
-    // 1) HOME OF THE STREET SWEEPERS — enterable dormitory (start)
-    // =========================================================
-    const dorm = addBuilding(-48, -48, 22, 6.5, 14, 0x2a2520, "north", 3, {
-      interiorColor: 0x3a342a,
-      emissiveWindows: true,
-    });
-    // beds inside
-    for (let i = 0; i < 5; i++) {
-      const bx = -48 - 8 + i * 4;
-      addBlock(bx, 0, -52, 2, 0.6, 4, 0x4a3a2a, { solid: false });
-      addBlock(bx, 0.6, -53.5, 2, 0.3, 1.2, 0xc8b890, { solid: false });
+    // =====================================================================
+    // SURFACE — DORMITORY exterior shell
+    // =====================================================================
+    const DORM_CX = -51, DORM_CZ = -51;
+    const dormExt = addBuilding("surface", DORM_CX, DORM_CZ, 24, 7, 16, M.plasterDark, "north", 3.4);
+    // Door marker mesh (the wooden door, locked-looking)
+    const dormDoor = new THREE.Mesh(new THREE.BoxGeometry(3.2, 4.6, 0.18), M.doorWood);
+    dormDoor.position.set(dormExt.doorX, 2.3, dormExt.doorZ - 0.05);
+    sceneAdd("surface", dormDoor);
+
+    // =====================================================================
+    // SURFACE — IRON GRATING
+    // =====================================================================
+    const GRATE_X = 130, GRATE_Z = 0;
+    for (const [ox, oz, sw, sd] of [[-2.3, 0, 0.6, 5], [2.3, 0, 0.6, 5], [0, -2.3, 5, 0.6], [0, 2.3, 5, 0.6]] as const) {
+      addBox("surface", GRATE_X + ox, 0, GRATE_Z + oz, sw, 0.4, sd, M.plasterDark, false);
     }
-    // a candle on a small table — the "parchment" interactable lives here
-    const parchmentTable = addBlock(-48, 0, -45, 1.4, 0.8, 1.4, 0x6a5a3a, { solid: false });
-    const candle = new THREE.Mesh(
-      new THREE.SphereGeometry(0.18, 8, 8),
-      new THREE.MeshStandardMaterial({ color: 0xfff0aa, emissive: 0xffcc66, emissiveIntensity: 2.2 }),
-    );
-    candle.position.set(-48, 1.1, -45);
-    scene.add(candle);
-    const candleLight = new THREE.PointLight(0xffc060, 1.6, 14);
-    candleLight.position.set(-48, 1.6, -45);
-    scene.add(candleLight);
-    // dim interior fill
-    const dormFill = new THREE.PointLight(0xffd58a, 0.6, 22);
-    dormFill.position.set(-48, 4, -48);
-    scene.add(dormFill);
-
-    // =========================================================
-    // 2) IRON GRATING — east edge of city. Opens, then descends.
-    // =========================================================
-    const GRATE_X = 165, GRATE_Z = 0;
-    // stone rim around the grate
-    addBlock(GRATE_X - 2.3, 0, GRATE_Z, 0.6, 0.4, 5, 0x3a342a, { solid: false });
-    addBlock(GRATE_X + 2.3, 0, GRATE_Z, 0.6, 0.4, 5, 0x3a342a, { solid: false });
-    addBlock(GRATE_X, 0, GRATE_Z - 2.3, 5, 0.4, 0.6, 0x3a342a, { solid: false });
-    addBlock(GRATE_X, 0, GRATE_Z + 2.3, 5, 0.4, 0.6, 0x3a342a, { solid: false });
-    // dark shaft revealed when the grate slides aside
-    const shaftHole = new THREE.Mesh(
-      new THREE.PlaneGeometry(3.8, 3.8),
-      new THREE.MeshBasicMaterial({ color: 0x000000 }),
-    );
+    const shaftHole = new THREE.Mesh(new THREE.PlaneGeometry(3.8, 3.8), new THREE.MeshBasicMaterial({ color: 0x000000 }));
     shaftHole.rotation.x = -Math.PI / 2;
     shaftHole.position.set(GRATE_X, 0.04, GRATE_Z);
-    scene.add(shaftHole);
-    // the grate itself
-    const grate = new THREE.Mesh(
-      new THREE.BoxGeometry(4, 0.18, 4),
-      new THREE.MeshStandardMaterial({
-        color: 0x3a3228, metalness: 0.7, roughness: 0.4,
-        emissive: 0x2a1a08, emissiveIntensity: 0.6,
-      }),
-    );
+    sceneAdd("surface", shaftHole);
+    const grate = new THREE.Mesh(new THREE.BoxGeometry(4, 0.18, 4), M.ironGrate);
     grate.position.set(GRATE_X, 0.1, GRATE_Z);
-    scene.add(grate);
+    sceneAdd("surface", grate);
     let grateOpen = false;
     let grateSlideT = 0;
-    // beacon above
-    const grateBeacon = new THREE.PointLight(0xff9050, 2.5, 60);
-    grateBeacon.position.set(GRATE_X, 6, GRATE_Z);
-    scene.add(grateBeacon);
 
-    // =========================================================
-    // 2b) THE UNDERGROUND — a hidden network at a distant X offset
-    // =========================================================
-    const UG_OX = 3000;
-    const undergroundGroup = new THREE.Group();
-    scene.add(undergroundGroup);
-    const undergroundColliders: { box: THREE.Box3 }[] = [];
-
-    const ugAddCollider = (mesh: THREE.Mesh) => {
-      undergroundColliders.push({ box: new THREE.Box3().setFromObject(mesh).expandByScalar(0.15) });
-    };
-
-    // Build a corridor between two underground-local points, with rails + ties + lanterns.
-    const buildCorridor = (
-      x1: number, z1: number, x2: number, z2: number,
-      width = 6, height = 5,
-    ) => {
-      const dx = x2 - x1, dz = z2 - z1;
-      const len = Math.hypot(dx, dz);
-      const angle = Math.atan2(dz, dx);
-      const cx = (x1 + x2) / 2, cz = (z1 + z2) / 2;
-      // Floor
-      const floor = new THREE.Mesh(
-        new THREE.PlaneGeometry(len, width),
-        new THREE.MeshStandardMaterial({ color: 0x14110c, roughness: 1 }),
-      );
-      floor.rotation.x = -Math.PI / 2;
-      floor.rotation.z = -angle;
-      floor.position.set(UG_OX + cx, 0.02, cz);
-      undergroundGroup.add(floor);
-      // Ceiling
-      const ceil = new THREE.Mesh(
-        new THREE.PlaneGeometry(len, width),
-        new THREE.MeshStandardMaterial({ color: 0x0a0806, roughness: 1, side: THREE.DoubleSide }),
-      );
-      ceil.rotation.x = Math.PI / 2;
-      ceil.rotation.z = angle;
-      ceil.position.set(UG_OX + cx, height, cz);
-      undergroundGroup.add(ceil);
-      // Two walls
-      const nx = -Math.sin(angle), nz = Math.cos(angle);
-      const wallMat = new THREE.MeshStandardMaterial({ color: 0x1a1612, roughness: 1 });
-      for (const side of [-1, 1]) {
-        const wall = new THREE.Mesh(new THREE.BoxGeometry(len, height, 0.3), wallMat);
-        wall.position.set(UG_OX + cx + nx * (width / 2) * side, height / 2, cz + nz * (width / 2) * side);
-        wall.rotation.y = -angle;
-        undergroundGroup.add(wall);
-        ugAddCollider(wall);
-      }
-      // Rails (two parallel)
-      const railMat = new THREE.MeshStandardMaterial({
-        color: 0x6a5a48, metalness: 0.85, roughness: 0.35,
-        emissive: 0x1a1208, emissiveIntensity: 0.3,
-      });
-      for (const side of [-1, 1]) {
-        const rail = new THREE.Mesh(new THREE.BoxGeometry(len, 0.12, 0.12), railMat);
-        rail.position.set(UG_OX + cx + nx * 0.6 * side, 0.1, cz + nz * 0.6 * side);
-        rail.rotation.y = -angle;
-        undergroundGroup.add(rail);
-      }
-      // Wooden ties across the rails
-      const tieMat = new THREE.MeshStandardMaterial({ color: 0x2a1e12, roughness: 1 });
-      const tieCount = Math.max(2, Math.floor(len / 1.6));
-      for (let i = 0; i < tieCount; i++) {
-        const tx = -len / 2 + (i + 0.5) * (len / tieCount);
-        const tie = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.08, Math.min(width - 1, 2.2)), tieMat);
-        tie.position.set(UG_OX + cx + Math.cos(angle) * tx, 0.06, cz + Math.sin(angle) * tx);
-        tie.rotation.y = -angle;
-        undergroundGroup.add(tie);
-      }
-      // Hanging lanterns
-      const lanternCount = Math.max(2, Math.floor(len / 14));
-      for (let i = 0; i < lanternCount; i++) {
-        const tx = -len / 2 + (i + 0.5) * (len / lanternCount);
-        const lx = UG_OX + cx + Math.cos(angle) * tx;
-        const lz = cz + Math.sin(angle) * tx;
-        const lantern = new THREE.Mesh(
-          new THREE.SphereGeometry(0.28, 10, 10),
-          new THREE.MeshStandardMaterial({ color: 0xffc060, emissive: 0xffaa44, emissiveIntensity: 2.2 }),
-        );
-        lantern.position.set(lx, height - 0.5, lz);
-        undergroundGroup.add(lantern);
-        const pl = new THREE.PointLight(0xffaa55, 1.6, 18);
-        pl.position.set(lx, height - 0.5, lz);
-        undergroundGroup.add(pl);
-      }
-    };
-
-    // Junction chamber floor & ceiling
-    const junctionFloor = new THREE.Mesh(
-      new THREE.PlaneGeometry(14, 14),
-      new THREE.MeshStandardMaterial({ color: 0x14110c, roughness: 1 }),
-    );
-    junctionFloor.rotation.x = -Math.PI / 2;
-    junctionFloor.position.set(UG_OX, 0.02, 0);
-    undergroundGroup.add(junctionFloor);
-    const junctionCeil = new THREE.Mesh(
-      new THREE.PlaneGeometry(14, 14),
-      new THREE.MeshStandardMaterial({ color: 0x0a0806, side: THREE.DoubleSide }),
-    );
-    junctionCeil.rotation.x = Math.PI / 2;
-    junctionCeil.position.set(UG_OX, 5, 0);
-    undergroundGroup.add(junctionCeil);
-    // Junction corner walls (filling gaps between the 4 corridor entrances)
-    const jwMat = new THREE.MeshStandardMaterial({ color: 0x1a1612, roughness: 1 });
-    const jSegs: [number, number, number, number][] = [
-      [-5, -7, 4, 0.3], [5, -7, 4, 0.3],
-      [-5, 7, 4, 0.3], [5, 7, 4, 0.3],
-      [-7, -5, 0.3, 4], [-7, 5, 0.3, 4],
-      [7, -5, 0.3, 4], [7, 5, 0.3, 4],
-    ];
-    for (const [sx, sz, sw, sd] of jSegs) {
-      const m = new THREE.Mesh(new THREE.BoxGeometry(sw, 5, sd), jwMat);
-      m.position.set(UG_OX + sx, 2.5, sz);
-      undergroundGroup.add(m);
-      ugAddCollider(m);
+    // =====================================================================
+    // SURFACE — FIELD (south, beyond a low wall with a gap at center)
+    // =====================================================================
+    for (let x = -140; x <= 140; x += 5) {
+      if (Math.abs(x) < 5) continue;
+      addBox("surface", x, 0, 150, 4.5, 2.4, 1.2, M.plasterDark);
     }
-    // Stair back to the surface — glowing pad at the junction
-    const stair = new THREE.Mesh(
-      new THREE.BoxGeometry(3, 0.25, 3),
-      new THREE.MeshStandardMaterial({ color: 0x6a5a3a, emissive: 0xffc060, emissiveIntensity: 0.9 }),
-    );
-    stair.position.set(UG_OX, 0.12, 5);
-    undergroundGroup.add(stair);
-    const stairLight = new THREE.PointLight(0xffd58a, 2.6, 22);
-    stairLight.position.set(UG_OX, 4, 5);
-    undergroundGroup.add(stairLight);
-
-    // The network — corridors radiate from the junction with branches
-    buildCorridor(0, -7, 0, -160, 6, 5);   // main north — leads to the light box
-    buildCorridor(0, 7, 0, 80, 6, 5);      // south
-    buildCorridor(-7, 0, -140, 0, 6, 5);   // west
-    buildCorridor(7, 0, 130, 0, 6, 5);     // east
-    // branches
-    buildCorridor(0, -80, -90, -80, 5, 5);
-    buildCorridor(0, -80, 90, -80, 5, 5);
-    buildCorridor(-140, 0, -140, -70, 5, 5);
-    buildCorridor(-140, 0, -140, 60, 5, 5);
-    buildCorridor(130, 0, 130, 80, 5, 5);
-    buildCorridor(0, 80, 60, 80, 5, 5);
-
-    // Dead-end details: broken minecart on rails
-    const cart = new THREE.Mesh(
-      new THREE.BoxGeometry(1.8, 1.1, 2.6),
-      new THREE.MeshStandardMaterial({ color: 0x2a1e12, roughness: 1 }),
-    );
-    cart.position.set(UG_OX + 60, 0.6, 0);
-    undergroundGroup.add(cart);
-    ugAddCollider(cart);
-    const cart2 = new THREE.Mesh(
-      new THREE.BoxGeometry(1.8, 1.1, 2.6),
-      new THREE.MeshStandardMaterial({ color: 0x2a1e12, roughness: 1 }),
-    );
-    cart2.position.set(UG_OX - 90, 0.6, 0);
-    cart2.rotation.y = 0.3;
-    undergroundGroup.add(cart2);
-    ugAddCollider(cart2);
-    // glowing crystals scattered in alcoves
-    for (let i = 0; i < 40; i++) {
-      const c = new THREE.Mesh(
-        new THREE.ConeGeometry(0.3, 1.3, 5),
-        new THREE.MeshStandardMaterial({ color: 0x88aaff, emissive: 0x4466cc, emissiveIntensity: 1.4 }),
-      );
-      // place near corridor walls
-      const corridorPicks = [
-        { x: 0, zMin: -160, zMax: -10, axis: "z" as const },
-        { x: 0, zMin: 10, zMax: 80, axis: "z" as const },
-        { z: 0, xMin: -140, xMax: -10, axis: "x" as const },
-        { z: 0, xMin: 10, xMax: 130, axis: "x" as const },
-      ];
-      const pick = corridorPicks[i % corridorPicks.length];
-      let lx = UG_OX, lz = 0;
-      if (pick.axis === "z") {
-        lx = UG_OX + (Math.random() < 0.5 ? -2.4 : 2.4);
-        lz = pick.zMin + Math.random() * (pick.zMax - pick.zMin);
-      } else {
-        lx = UG_OX + (pick.xMin + Math.random() * (pick.xMax - pick.xMin));
-        lz = Math.random() < 0.5 ? -2.4 : 2.4;
-      }
-      c.position.set(lx, 0.65, lz);
-      c.rotation.z = (Math.random() - 0.5) * 0.4;
-      undergroundGroup.add(c);
-    }
-
-    // The LIGHT BOX — far end of the north corridor
-    const lightBox = new THREE.Mesh(
-      new THREE.BoxGeometry(0.7, 0.9, 0.7),
-      new THREE.MeshStandardMaterial({ color: 0xfff8dd, emissive: 0xfff0aa, emissiveIntensity: 2.0 }),
-    );
-    lightBox.position.set(UG_OX, 1.0, -155);
-    undergroundGroup.add(lightBox);
-    const lightBoxLight = new THREE.PointLight(0xffeeaa, 4, 60);
-    lightBoxLight.position.set(UG_OX, 2, -155);
-    undergroundGroup.add(lightBoxLight);
-    // small altar under the box
-    const lbAltar = new THREE.Mesh(
-      new THREE.BoxGeometry(1.4, 0.6, 1.4),
-      new THREE.MeshStandardMaterial({ color: 0x4a3a2a, roughness: 1 }),
-    );
-    lbAltar.position.set(UG_OX, 0.3, -155);
-    undergroundGroup.add(lbAltar);
-    // ambient underground glow
-    const ugAmbient = new THREE.AmbientLight(0x2a2018, 0.6);
-    undergroundGroup.add(ugAmbient);
-
-    undergroundGroup.visible = false;
-
-    // =========================================================
-    // 3) THE FIELD — south, beyond a low wall with a gap
-    // =========================================================
-    for (let x = -160; x <= 160; x += 4) {
-      if (Math.abs(x) < 6) continue;
-      addBlock(x, 0, 168, 3.8, 2.6, 1.2, 0x3c362c);
-    }
-    const fieldMesh = new THREE.Mesh(
-      new THREE.PlaneGeometry(380, 280),
-      new THREE.MeshStandardMaterial({ color: 0x8a7a3a, roughness: 1 }),
-    );
+    const fieldMesh = new THREE.Mesh(new THREE.PlaneGeometry(340, 240), M.grass);
     fieldMesh.rotation.x = -Math.PI / 2;
-    fieldMesh.position.set(0, 0.02, 300);
-    scene.add(fieldMesh);
-    for (let i = 0; i < 500; i++) {
-      const tuft = new THREE.Mesh(
-        new THREE.ConeGeometry(0.35, 1.3, 5),
-        new THREE.MeshStandardMaterial({ color: 0xc8a84a }),
-      );
-      tuft.position.set((Math.random() - 0.5) * 360, 0.65, 180 + Math.random() * 240);
-      scene.add(tuft);
+    fieldMesh.position.set(0, 0.02, 270);
+    sceneAdd("surface", fieldMesh);
+    const tuftGeo = new THREE.ConeGeometry(0.35, 1.3, 4);
+    for (let i = 0; i < 180; i++) {
+      const tuft = new THREE.Mesh(tuftGeo, M.tuft);
+      tuft.position.set((rand() - 0.5) * 320, 0.65, 170 + rand() * 200);
+      sceneAdd("surface", tuft);
     }
     // Liberty 5-3000
     const liberty = new THREE.Group();
-    const body = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.4, 0.45, 1.7, 12),
-      new THREE.MeshStandardMaterial({ color: 0xe8d18a, emissive: 0x4a3a10, emissiveIntensity: 0.4 }),
-    );
-    body.position.y = 0.85;
-    liberty.add(body);
-    const head = new THREE.Mesh(
-      new THREE.SphereGeometry(0.3, 16, 16),
-      new THREE.MeshStandardMaterial({ color: 0xffe8b8, emissive: 0x886622, emissiveIntensity: 0.5 }),
-    );
-    head.position.y = 1.95;
-    liberty.add(head);
-    liberty.position.set(20, 0, 260);
-    scene.add(liberty);
-    const libLight = new THREE.PointLight(0xffd070, 2.5, 30);
-    libLight.position.set(20, 2.5, 260);
-    scene.add(libLight);
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.45, 1.7, 10),
+      new THREE.MeshLambertMaterial({ color: 0xe8d18a }));
+    body.position.y = 0.85; liberty.add(body);
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.3, 12, 10),
+      new THREE.MeshStandardMaterial({ color: 0xffe8b8, emissive: 0x886622, emissiveIntensity: 0.45 }));
+    head.position.y = 1.95; liberty.add(head);
+    liberty.position.set(20, 0, 250);
+    sceneAdd("surface", liberty);
 
-    // =========================================================
-    // 4) COUNCIL HALL — far north, large enterable temple
-    // =========================================================
-    const council = addBuilding(0, -200, 50, 14, 36, 0x3a342a, "south", 6, {
-      interiorColor: 0x2a2418,
-    });
-    // gate at entrance — locked until you've met the Golden One
-    addGate(0, council.doorZ + 0.6, "ew", 6, 3, "Council sealed — meet the Golden One first");
-    // pillars in front
+    // =====================================================================
+    // SURFACE — COUNCIL HALL EXTERIOR
+    // =====================================================================
+    const COUNCIL_CX = 0, COUNCIL_CZ = -160;
+    // Exterior shell — no door gap, the door is a mesh you press E on
+    addBox("surface", COUNCIL_CX, 0, COUNCIL_CZ + 18, 50, 16, 0.5, M.plaster); // front
+    addBox("surface", COUNCIL_CX, 0, COUNCIL_CZ - 18, 50, 16, 0.5, M.plaster); // back
+    addBox("surface", COUNCIL_CX + 25, 0, COUNCIL_CZ, 0.5, 16, 36, M.plaster);
+    addBox("surface", COUNCIL_CX - 25, 0, COUNCIL_CZ, 0.5, 16, 36, M.plaster);
+    // pillars in front of council
     for (let i = -2; i <= 2; i++) {
       if (i === 0) continue;
-      addBlock(i * 7, 0, -178, 1.6, 12, 1.6, 0x4a4438);
+      addBox("surface", COUNCIL_CX + i * 8, 0, COUNCIL_CZ + 22, 1.6, 13, 1.6, M.pillarDark);
     }
-    // pillars inside
-    for (let i = 0; i < 8; i++) {
-      const a = (i / 8) * Math.PI * 2;
-      const px = Math.cos(a) * 10;
-      const pz = -200 + Math.sin(a) * 10;
-      addBlock(px, 0, pz, 1.4, 12, 1.4, 0x5a5040);
-    }
-    const altar = new THREE.Mesh(
-      new THREE.BoxGeometry(3, 1.6, 3),
-      new THREE.MeshStandardMaterial({ color: 0x6a5a3a, emissive: 0x221810, emissiveIntensity: 0.6 }),
-    );
-    altar.position.set(0, 0.8, -200);
-    scene.add(altar);
-    const altarLight = new THREE.PointLight(0xffaa66, 2.2, 40);
-    altarLight.position.set(0, 6, -200);
-    scene.add(altarLight);
-    // braziers
-    [[-15, -180], [15, -180]].forEach(([bx, bz]) => {
-      const t = addBlock(bx, 4, bz, 1, 1, 1, 0xffaa55, { emissive: 0xff7733, solid: false });
-      t.position.y = 4.5;
-      const pl = new THREE.PointLight(0xffaa55, 2, 30);
-      pl.position.set(bx, 5, bz);
-      scene.add(pl);
-    });
+    // roof slab
+    const councilRoof = new THREE.Mesh(new THREE.BoxGeometry(52, 0.6, 38), M.roof);
+    councilRoof.position.set(COUNCIL_CX, 16.3, COUNCIL_CZ);
+    sceneAdd("surface", councilRoof);
+    // Door
+    const councilDoor = new THREE.Mesh(new THREE.BoxGeometry(6, 9, 0.3), M.doorWood);
+    councilDoor.position.set(COUNCIL_CX, 4.5, COUNCIL_CZ + 18.2);
+    sceneAdd("surface", councilDoor);
 
-    // =========================================================
-    // 5) UNCHARTED FOREST — far west, expansive
-    // =========================================================
-    // forest gate at city's west boundary
-    addGate(-170, 0, "ns", 8, 4, "Forest forbidden — flee the Council first");
-    for (let i = 0; i < 700; i++) {
-      const x = -180 - Math.random() * 360;
-      const z = (Math.random() - 0.5) * 480;
-      const h = 6 + Math.random() * 5;
-      const trunk = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.45, 0.6, h, 6),
-        new THREE.MeshStandardMaterial({ color: 0x231a12 }),
-      );
-      trunk.position.set(x, h / 2, z);
-      scene.add(trunk);
-      const top = new THREE.Mesh(
-        new THREE.ConeGeometry(2.6, 6, 7),
-        new THREE.MeshStandardMaterial({ color: 0x1e3a22 }),
-      );
-      top.position.set(x, h + 2.5, z);
-      scene.add(top);
-      colliders.push({ box: new THREE.Box3().setFromObject(trunk).expandByScalar(0.2) });
-    }
-    // forest beacon to guide the player
-    const forestBeacon = new THREE.PointLight(0x88ffaa, 1.4, 50);
-    forestBeacon.position.set(-220, 8, 0);
-    scene.add(forestBeacon);
-    const forestMarker = addBlock(-220, 0, 0, 1.5, 0.3, 1.5, 0x4a3a2a, { emissive: 0x1a1208, solid: false });
+    // =====================================================================
+    // SURFACE — UNCHARTED FOREST
+    // =====================================================================
+    // Forest gate (still uses gate system — it's a barrier, not a door)
+    const gates: Gate[] = [];
+    const addGate = (x: number, z: number, orient: "ns" | "ew", w: number, unlockAfter: number, label: string) => {
+      const ww = orient === "ns" ? w : 0.6;
+      const dd = orient === "ns" ? 0.6 : w;
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(ww, 3.6, dd), M.door);
+      mesh.position.set(x, 1.8, z);
+      sceneAdd("surface", mesh);
+      const box = new THREE.Box3().setFromObject(mesh).expandByScalar(0.1);
+      const collider = { box };
+      colliderSets.surface.push(collider);
+      gates.push({ unlockAfter, collider, mesh, open: false, label, position: new THREE.Vector3(x, 1.8, z) });
+    };
+    addGate(-140, 0, "ns", 8, 4, "Forest forbidden — flee the Council first");
 
-    // =========================================================
-    // 6) HOUSE OF THE UNMENTIONABLE TIMES — deep west, enterable
-    // =========================================================
-    const houseColors = [0x7a3a3a, 0x3a5a7a, 0x6a6a3a, 0x4a3a6a];
-    const HX = -450, HZ = 0;
-    // colored glass walls (each face a different color)
-    const houseT = 0.4, houseW = 22, houseH = 9, houseD = 26, doorW = 4;
-    // south door
-    const sideS = (houseW - doorW) / 2;
-    addBlock(HX - (doorW / 2 + sideS / 2), 0, HZ + houseD / 2, sideS, houseH, houseT, houseColors[0], { emissive: houseColors[0], emissiveIntensity: 0.35 });
-    addBlock(HX + (doorW / 2 + sideS / 2), 0, HZ + houseD / 2, sideS, houseH, houseT, houseColors[0], { emissive: houseColors[0], emissiveIntensity: 0.35 });
-    addBlock(HX, houseH - 0.8, HZ + houseD / 2, doorW, 1.2, houseT, houseColors[0], { emissive: houseColors[0], emissiveIntensity: 0.35 });
-    // north
-    addBlock(HX, 0, HZ - houseD / 2, houseW, houseH, houseT, houseColors[1], { emissive: houseColors[1], emissiveIntensity: 0.35 });
-    // east
-    addBlock(HX + houseW / 2, 0, HZ, houseT, houseH, houseD, houseColors[2], { emissive: houseColors[2], emissiveIntensity: 0.35 });
-    // west
-    addBlock(HX - houseW / 2, 0, HZ, houseT, houseH, houseD, houseColors[3], { emissive: houseColors[3], emissiveIntensity: 0.35 });
-    // roof
-    const houseRoof = new THREE.Mesh(
-      new THREE.BoxGeometry(houseW + 0.4, 0.3, houseD + 0.4),
-      new THREE.MeshStandardMaterial({ color: 0x2a2018 }),
-    );
-    houseRoof.position.set(HX, houseH + 0.15, HZ);
-    scene.add(houseRoof);
+    const trunkGeo = new THREE.CylinderGeometry(0.45, 0.6, 9, 5);
+    const topGeo = new THREE.ConeGeometry(2.6, 6, 6);
+    for (let i = 0; i < 240; i++) {
+      const x = -160 - rand() * 280;
+      const z = (rand() - 0.5) * 420;
+      const trunk = new THREE.Mesh(trunkGeo, M.trunk);
+      trunk.position.set(x, 4.5, z);
+      sceneAdd("surface", trunk);
+      const top = new THREE.Mesh(topGeo, M.leaves);
+      top.position.set(x, 11, z);
+      sceneAdd("surface", top);
+      // Cheap cylinder collider via expanded box
+      const box = new THREE.Box3(new THREE.Vector3(x - 0.7, 0, z - 0.7), new THREE.Vector3(x + 0.7, 9, z + 0.7));
+      colliderSets.surface.push({ box });
+    }
+    // Forest marker
+    const FOREST_X = -200, FOREST_Z = 0;
+    const forestMarker = addBox("surface", FOREST_X, 0, FOREST_Z, 1.5, 0.3, 1.5, M.altar, false);
+    forestMarker.position.y = 0.15;
+
+    // =====================================================================
+    // SURFACE — GLASS HOUSE EXTERIOR
+    // =====================================================================
+    const HX = -420, HZ = 0;
+    const HW = 22, HH = 9, HD = 26, HT = 0.4, HDOOR = 4;
+    const hs = (HW - HDOOR) / 2;
+    // south wall with door gap (red glass)
+    addBox("surface", HX - (HDOOR / 2 + hs / 2), 0, HZ + HD / 2, hs, HH, HT, M.glassR);
+    addBox("surface", HX + (HDOOR / 2 + hs / 2), 0, HZ + HD / 2, hs, HH, HT, M.glassR);
+    addBox("surface", HX, HH - 0.8, HZ + HD / 2, HDOOR, 1.2, HT, M.glassR, false);
+    addBox("surface", HX, 0, HZ - HD / 2, HW, HH, HT, M.glassB); // north blue
+    addBox("surface", HX + HW / 2, 0, HZ, HT, HH, HD, M.glassG); // east green
+    addBox("surface", HX - HW / 2, 0, HZ, HT, HH, HD, M.glassY); // west yellow
+    const houseRoofMesh = new THREE.Mesh(new THREE.BoxGeometry(HW + 0.4, 0.3, HD + 0.4), M.roof);
+    houseRoofMesh.position.set(HX, HH + 0.15, HZ);
+    sceneAdd("surface", houseRoofMesh);
+    // door
+    const houseDoor = new THREE.Mesh(new THREE.BoxGeometry(HDOOR, 5.2, 0.3), M.doorWood);
+    houseDoor.position.set(HX, 2.6, HZ + HD / 2 + 0.05);
+    sceneAdd("surface", houseDoor);
+
+    // =====================================================================
+    // INTERIOR — DORMITORY (period: long hall, oil lamps, iron cots)
+    // =====================================================================
+    // Big room ~ 28 x 18, low ceiling
+    const D_W = 28, D_D = 18, D_H = 5;
+    // Floor (wood plank)
+    addFloor("dorm", 0, 0, D_W, D_D, M.wood);
+    // Ceiling
+    const dormCeil = new THREE.Mesh(new THREE.PlaneGeometry(D_W, D_D), M.woodDark);
+    dormCeil.rotation.x = Math.PI / 2;
+    dormCeil.position.set(0, D_H, 0);
+    sceneAdd("dorm", dormCeil);
+    // Four walls (plaster, no openings — this is a sealed room)
+    addBox("dorm", 0, 0, -D_D / 2, D_W, D_H, 0.3, M.plaster);
+    addBox("dorm", 0, 0, D_D / 2, D_W, D_H, 0.3, M.plaster);
+    addBox("dorm", -D_W / 2, 0, 0, 0.3, D_H, D_D, M.plaster);
+    addBox("dorm", D_W / 2, 0, 0, 0.3, D_H, D_D, M.plaster);
+    // Exposed ceiling beams
+    for (let i = -2; i <= 2; i++) {
+      const beam = new THREE.Mesh(G.tieBeam, M.woodDark);
+      beam.rotation.y = Math.PI / 2;
+      beam.position.set(i * 5, D_H - 0.2, 0);
+      // make beam span full width
+      beam.scale.set(D_W / 6, 1, 1);
+      sceneAdd("dorm", beam);
+    }
+    // Two rows of iron cots
+    for (let row = 0; row < 2; row++) {
+      const zRow = row === 0 ? -5 : 5;
+      for (let i = 0; i < 6; i++) {
+        const bx = -10 + i * 4;
+        const frame = new THREE.Mesh(G.bedFrame, M.bedFrame);
+        frame.position.set(bx, 0.25, zRow);
+        sceneAdd("dorm", frame);
+        const mattress = new THREE.Mesh(G.bedMattress, M.cloth);
+        mattress.position.set(bx, 0.6, zRow);
+        sceneAdd("dorm", mattress);
+        const pillow = new THREE.Mesh(G.pillow, M.window);
+        pillow.position.set(bx, 0.78, zRow - 1.4);
+        sceneAdd("dorm", pillow);
+      }
+    }
+    // Player's cot (highlighted) with the parchment underneath, near the entry
+    const myCot = new THREE.Mesh(G.bedFrame, M.bedFrame);
+    myCot.position.set(11, 0.25, 0);
+    sceneAdd("dorm", myCot);
+    addBox("dorm", 11, 0, -2, 1.4, 0.5, 1.4, M.wood, false); // small chest at foot
+    // Parchment on chest — glows
+    const parchment = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.05, 0.5),
+      new THREE.MeshStandardMaterial({ color: 0xeed9a4, emissive: 0xffe080, emissiveIntensity: 1.4 }));
+    parchment.position.set(11, 0.78, -2);
+    sceneAdd("dorm", parchment);
+    // Oil lamp on a wall sconce
+    const lamp1 = new THREE.Mesh(G.lamp, M.candle);
+    lamp1.position.set(-10, 3.6, -D_D / 2 + 0.4);
+    sceneAdd("dorm", lamp1);
+    const dormLight1 = new THREE.PointLight(0xffc070, 1.4, 26);
+    dormLight1.position.set(-10, 3.6, -D_D / 2 + 0.4);
+    sceneAdd("dorm", dormLight1);
+    const lamp2 = new THREE.Mesh(G.lamp, M.candle);
+    lamp2.position.set(8, 3.6, D_D / 2 - 0.4);
+    sceneAdd("dorm", lamp2);
+    const dormLight2 = new THREE.PointLight(0xffc070, 1.4, 26);
+    dormLight2.position.set(8, 3.6, D_D / 2 - 0.4);
+    sceneAdd("dorm", dormLight2);
+    // Exit pad — at one end, glowing — labeled "the door"
+    const dormExit = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.15, 1.6), M.exitPad);
+    dormExit.position.set(-D_W / 2 + 1.5, 0.08, 0);
+    sceneAdd("dorm", dormExit);
+    // Visible door frame at exit
+    addBox("dorm", -D_W / 2 + 0.3, 0, 0, 0.4, 4.5, 3.2, M.doorWood, false);
+
+    // =====================================================================
+    // INTERIOR — UNDERGROUND (a clean enclosed network — no holes)
+    // =====================================================================
+    // Junction chamber
+    const J = 18, JH = 5;
+    addFloor("underground", 0, 0, J, J, M.tunnelFloor);
+    const jc = new THREE.Mesh(new THREE.PlaneGeometry(J, J), M.tunnelCeil);
+    jc.rotation.x = Math.PI / 2;
+    jc.position.set(0, JH, 0);
+    sceneAdd("underground", jc);
+    // Junction walls with 4 openings (one per compass direction)
+    // Each opening is 6 wide centered.
+    const OPEN = 6;
+    const side = (J - OPEN) / 2;
+    for (const sign of [-1, 1] as const) {
+      // North/south walls have openings in X
+      const s1 = (-J / 2) + side / 2;
+      const s2 = (J / 2) - side / 2;
+      addBox("underground", sign * s1, 0, -J / 2, side, JH, 0.4, M.tunnelWall);
+      addBox("underground", sign * s2, 0, -J / 2, side, JH, 0.4, M.tunnelWall);
+      addBox("underground", sign * s1, 0, J / 2, side, JH, 0.4, M.tunnelWall);
+      addBox("underground", sign * s2, 0, J / 2, side, JH, 0.4, M.tunnelWall);
+      // East/west walls have openings in Z
+      addBox("underground", -J / 2, 0, sign * s1, 0.4, JH, side, M.tunnelWall);
+      addBox("underground", -J / 2, 0, sign * s2, 0.4, JH, side, M.tunnelWall);
+      addBox("underground", J / 2, 0, sign * s1, 0.4, JH, side, M.tunnelWall);
+      addBox("underground", J / 2, 0, sign * s2, 0.4, JH, side, M.tunnelWall);
+    }
+    // Corridor builder — closed box: floor, ceiling, two solid walls, capped at far end
+    const buildCorridor = (
+      fromX: number, fromZ: number, toX: number, toZ: number,
+      width = OPEN, height = JH,
+      capFar = false,
+    ) => {
+      const dx = toX - fromX, dz = toZ - fromZ;
+      const len = Math.hypot(dx, dz);
+      const angle = Math.atan2(dz, dx);
+      const cx = (fromX + toX) / 2, cz = (fromZ + toZ) / 2;
+      // floor
+      const f = new THREE.Mesh(new THREE.PlaneGeometry(len, width), M.tunnelFloor);
+      f.rotation.x = -Math.PI / 2;
+      f.rotation.z = -angle;
+      f.position.set(cx, 0.02, cz);
+      sceneAdd("underground", f);
+      // ceiling
+      const c = new THREE.Mesh(new THREE.PlaneGeometry(len, width), M.tunnelCeil);
+      c.rotation.x = Math.PI / 2;
+      c.rotation.z = angle;
+      c.position.set(cx, height, cz);
+      sceneAdd("underground", c);
+      // walls
+      const nx = -Math.sin(angle), nz = Math.cos(angle);
+      for (const sgn of [-1, 1]) {
+        const wallMesh = new THREE.Mesh(new THREE.BoxGeometry(len, height, 0.4), M.tunnelWall);
+        wallMesh.position.set(cx + nx * (width / 2) * sgn, height / 2, cz + nz * (width / 2) * sgn);
+        wallMesh.rotation.y = -angle;
+        sceneAdd("underground", wallMesh);
+        const box = new THREE.Box3().setFromObject(wallMesh).expandByScalar(0.1);
+        // strip x offset
+        box.min.x -= SCENE_OFFSETS.underground;
+        box.max.x -= SCENE_OFFSETS.underground;
+        colliderSets.underground.push({ box });
+      }
+      if (capFar) {
+        // End cap wall perpendicular to corridor at the far end
+        const cap = new THREE.Mesh(new THREE.BoxGeometry(width, height, 0.4), M.tunnelWall);
+        cap.position.set(toX, height / 2, toZ);
+        cap.rotation.y = -angle + Math.PI / 2;
+        sceneAdd("underground", cap);
+        const box = new THREE.Box3().setFromObject(cap).expandByScalar(0.1);
+        box.min.x -= SCENE_OFFSETS.underground;
+        box.max.x -= SCENE_OFFSETS.underground;
+        colliderSets.underground.push({ box });
+      }
+      // rails
+      for (const sgn of [-1, 1]) {
+        const rail = new THREE.Mesh(new THREE.BoxGeometry(len, 0.1, 0.1), M.rail);
+        rail.position.set(cx + nx * 0.7 * sgn, 0.1, cz + nz * 0.7 * sgn);
+        rail.rotation.y = -angle;
+        sceneAdd("underground", rail);
+      }
+      // lanterns (emissive only, with sparse PointLights)
+      const lanternCount = Math.max(1, Math.floor(len / 18));
+      for (let i = 0; i < lanternCount; i++) {
+        const tx = -len / 2 + (i + 0.5) * (len / lanternCount);
+        const lx = cx + Math.cos(angle) * tx;
+        const lz = cz + Math.sin(angle) * tx;
+        const lan = new THREE.Mesh(G.lamp, M.lantern);
+        lan.position.set(lx, height - 0.5, lz);
+        sceneAdd("underground", lan);
+        // only every other lantern gets a real light
+        if (i % 2 === 0) {
+          const pl = new THREE.PointLight(0xffaa55, 1.3, 22);
+          pl.position.set(lx, height - 0.5, lz);
+          sceneAdd("underground", pl);
+        }
+      }
+    };
+
+    // Main corridors radiating from the junction. Each is CAPPED so there
+    // are no exposed ends. The "light box" room is the end of the north
+    // corridor, with its own enclosed chamber.
+    buildCorridor(0, -J / 2, 0, -90, OPEN, JH, false); // north corridor → leads to chamber
+    buildCorridor(0, J / 2, 0, 70, OPEN, JH, true);    // south, dead end
+    buildCorridor(-J / 2, 0, -110, 0, OPEN, JH, true); // west
+    buildCorridor(J / 2, 0, 110, 0, OPEN, JH, true);   // east
+
+    // Light box chamber at end of north corridor: 16x16 room
+    const CHX = 0, CHZ = -110, CHS = 16;
     // floor
-    const houseFloor = new THREE.Mesh(
-      new THREE.PlaneGeometry(houseW - 1, houseD - 1),
-      new THREE.MeshStandardMaterial({ color: 0x6a5a3a, roughness: 0.8 }),
-    );
-    houseFloor.rotation.x = -Math.PI / 2;
-    houseFloor.position.set(HX, 0.03, HZ);
-    scene.add(houseFloor);
-    // mirror & furniture
-    addBlock(HX + 8, 0, HZ - 8, 2, 4, 0.2, 0xddddee, { emissive: 0x88aacc, emissiveIntensity: 0.3, solid: false });
-    addBlock(HX - 8, 0, HZ + 6, 3, 1, 1.5, 0x6a4a2a, { solid: false });
-    // gate at house entrance — locked until you reach the Forest
-    addGate(HX, HZ + houseD / 2 + 0.6, "ew", doorW, 5, "House sealed — walk the forest first");
-    // big inner light
-    const houseLight = new THREE.PointLight(0xfff0c0, 3, 60);
-    houseLight.position.set(HX, 5, HZ);
-    scene.add(houseLight);
+    addFloor("underground", CHX, CHZ, CHS, CHS, M.tunnelFloor);
+    // ceiling
+    const chCeil = new THREE.Mesh(new THREE.PlaneGeometry(CHS, CHS), M.tunnelCeil);
+    chCeil.rotation.x = Math.PI / 2;
+    chCeil.position.set(CHX, JH, CHZ);
+    sceneAdd("underground", chCeil);
+    // 4 walls with single opening on the south side connecting to corridor
+    const chOpen = OPEN;
+    const chSide = (CHS - chOpen) / 2;
+    // south wall: opening to corridor (corridor ends at z=-90, chamber south face at CHZ + CHS/2 = -102)
+    // So we need to extend corridor up to chamber south wall. Re-cap:
+    // The north corridor goes (0,-9) → (0,-90). Chamber south face is at -102.
+    // Bridge gap with another corridor segment from (0,-90) to (0,-102).
+    buildCorridor(0, -90, 0, -102, chOpen, JH, false);
+    addBox("underground", -chSide / 2 - chOpen / 2, 0, CHZ + CHS / 2, chSide, JH, 0.4, M.tunnelWall);
+    addBox("underground", chSide / 2 + chOpen / 2, 0, CHZ + CHS / 2, chSide, JH, 0.4, M.tunnelWall);
+    // north wall (back of chamber, solid)
+    addBox("underground", CHX, 0, CHZ - CHS / 2, CHS, JH, 0.4, M.tunnelWall);
+    // east/west walls solid
+    addBox("underground", CHX + CHS / 2, 0, CHZ, 0.4, JH, CHS, M.tunnelWall);
+    addBox("underground", CHX - CHS / 2, 0, CHZ, 0.4, JH, CHS, M.tunnelWall);
+    // Altar and the glass light box
+    const lbAltar = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.7, 1.6), M.altar);
+    lbAltar.position.set(CHX, 0.35, CHZ - 2);
+    sceneAdd("underground", lbAltar);
+    const lightBox = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.9, 0.7),
+      new THREE.MeshStandardMaterial({ color: 0xfff8dd, emissive: 0xfff0aa, emissiveIntensity: 2.0 }));
+    lightBox.position.set(CHX, 1.15, CHZ - 2);
+    sceneAdd("underground", lightBox);
+    const lbLight = new THREE.PointLight(0xffeeaa, 3, 35);
+    lbLight.position.set(CHX, 2.5, CHZ - 2);
+    sceneAdd("underground", lbLight);
 
-    // The Book — final pickup, on a pedestal inside the house
-    addBlock(HX, 0, HZ - 4, 1.4, 1.1, 1.4, 0x4a3a2a, { solid: false });
+    // Stair pad back to the surface — placed in the junction
+    const stair = new THREE.Mesh(new THREE.BoxGeometry(3, 0.25, 3), M.exitPad);
+    stair.position.set(0, 0.13, 6);
+    sceneAdd("underground", stair);
+    const stairLight = new THREE.PointLight(0xffd58a, 2.2, 18);
+    stairLight.position.set(0, 3.5, 6);
+    sceneAdd("underground", stairLight);
+    // Ambient so it's not pitch black between lanterns
+    sceneAdd("underground", new THREE.AmbientLight(0x2a2018, 0.55));
+    sceneAdd("underground", new THREE.HemisphereLight(0x3a2a18, 0x0a0806, 0.35));
+
+    // =====================================================================
+    // INTERIOR — COUNCIL HALL (vast colonnaded chamber)
+    // =====================================================================
+    const C_W = 36, C_D = 28, C_H = 14;
+    addFloor("council", 0, 0, C_W, C_D, M.altarStone);
+    // ceiling
+    const cCeil = new THREE.Mesh(new THREE.PlaneGeometry(C_W, C_D), M.woodDark);
+    cCeil.rotation.x = Math.PI / 2;
+    cCeil.position.set(0, C_H, 0);
+    sceneAdd("council", cCeil);
+    // walls
+    addBox("council", 0, 0, -C_D / 2, C_W, C_H, 0.4, M.plasterDark);
+    addBox("council", 0, 0, C_D / 2, C_W, C_H, 0.4, M.plasterDark);
+    addBox("council", -C_W / 2, 0, 0, 0.4, C_H, C_D, M.plasterDark);
+    addBox("council", C_W / 2, 0, 0, 0.4, C_H, C_D, M.plasterDark);
+    // Two rows of pillars
+    for (let i = -2; i <= 2; i++) {
+      addBox("council", i * 6, 0, -7, 1.2, C_H, 1.2, M.pillar);
+      addBox("council", i * 6, 0, 7, 1.2, C_H, 1.2, M.pillar);
+    }
+    // Long council table at the far end
+    addBox("council", 0, 0, -C_D / 2 + 4, 18, 1.1, 1.6, M.wood);
+    // Five chairs behind
+    for (let i = -2; i <= 2; i++) {
+      addBox("council", i * 3.4, 0, -C_D / 2 + 2.5, 1.2, 2.2, 1.2, M.woodDark);
+    }
+    // Altar at center where you present the light
+    const councilAltar = new THREE.Mesh(new THREE.BoxGeometry(2.4, 1.2, 2.4), M.altar);
+    councilAltar.position.set(0, 0.6, 0);
+    sceneAdd("council", councilAltar);
+    // braziers
+    for (const [bx, bz] of [[-10, -4], [10, -4]] as const) {
+      const t = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), M.fire);
+      t.position.set(bx, 4.5, bz);
+      sceneAdd("council", t);
+      const pl = new THREE.PointLight(0xff7733, 2.0, 26);
+      pl.position.set(bx, 5.2, bz);
+      sceneAdd("council", pl);
+    }
+    sceneAdd("council", new THREE.AmbientLight(0x6a5a48, 0.55));
+    sceneAdd("council", new THREE.HemisphereLight(0xc8a880, 0x2a1810, 0.5));
+    // Exit pad — at the south entrance
+    const councilExit = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.15, 1.6), M.exitPad);
+    councilExit.position.set(0, 0.08, C_D / 2 - 1.5);
+    sceneAdd("council", councilExit);
+    addBox("council", 0, 0, C_D / 2 - 0.3, 6, 9, 0.4, M.doorWood, false);
+
+    // =====================================================================
+    // INTERIOR — GLASS HOUSE (period: rugs, books, mirrors)
+    // =====================================================================
+    const H_W = 22, H_D = 26, H_H = 9;
+    addFloor("house", 0, 0, H_W, H_D, M.wood);
+    // Slight tint walls inside to echo the colored glass
+    addBox("house", 0, 0, -H_D / 2, H_W, H_H, 0.3, M.plaster);
+    addBox("house", 0, 0, H_D / 2, H_W, H_H, 0.3, M.plaster);
+    addBox("house", -H_W / 2, 0, 0, 0.3, H_H, H_D, M.plaster);
+    addBox("house", H_W / 2, 0, 0, 0.3, H_H, H_D, M.plaster);
+    const hCeil = new THREE.Mesh(new THREE.PlaneGeometry(H_W, H_D), M.woodDark);
+    hCeil.rotation.x = Math.PI / 2;
+    hCeil.position.set(0, H_H, 0);
+    sceneAdd("house", hCeil);
+    // colored window slits (interior side of the glass walls)
+    for (const [px, pz, ry, mat] of [
+      [0, H_D / 2 - 0.31, Math.PI, M.glassR],
+      [0, -H_D / 2 + 0.31, 0, M.glassB],
+      [H_W / 2 - 0.31, 0, -Math.PI / 2, M.glassG],
+      [-H_W / 2 + 0.31, 0, Math.PI / 2, M.glassY],
+    ] as const) {
+      const pane = new THREE.Mesh(new THREE.PlaneGeometry(8, 5), mat as THREE.Material);
+      pane.position.set(px as number, 4.5, pz as number);
+      pane.rotation.y = ry as number;
+      sceneAdd("house", pane);
+    }
+    // furniture: bookcase
+    addBox("house", -H_W / 2 + 1.2, 0, -6, 1.6, 5, 4, M.wood);
+    addBox("house", -H_W / 2 + 1.2, 0, 0, 1.6, 5, 4, M.wood);
+    addBox("house", -H_W / 2 + 1.2, 0, 6, 1.6, 5, 4, M.wood);
+    // mirror
+    const mirror = new THREE.Mesh(new THREE.BoxGeometry(0.2, 5, 2.4), M.mirror);
+    mirror.position.set(H_W / 2 - 0.4, 2.5, -6);
+    sceneAdd("house", mirror);
+    // table
+    addBox("house", 4, 0, 0, 4, 1.1, 2.2, M.wood, false);
+    // rug
+    const rug = new THREE.Mesh(new THREE.PlaneGeometry(8, 12),
+      new THREE.MeshLambertMaterial({ color: 0x6a2a2a }));
+    rug.rotation.x = -Math.PI / 2;
+    rug.position.set(0, 0.04, 0);
+    sceneAdd("house", rug);
+    // The Book on a pedestal
+    addBox("house", 0, 0, -H_D / 2 + 4, 1.4, 1.1, 1.4, M.wood, false);
     const bookGroup = new THREE.Group();
-    const book = new THREE.Mesh(
-      new THREE.BoxGeometry(1, 0.18, 1.3),
-      new THREE.MeshStandardMaterial({ color: 0xeeddaa, emissive: 0xffe8a0, emissiveIntensity: 1.1 }),
-    );
+    const book = new THREE.Mesh(new THREE.BoxGeometry(1, 0.18, 1.3), M.gold);
     bookGroup.add(book);
-    bookGroup.position.set(HX, 1.5, HZ - 4);
-    scene.add(bookGroup);
-    const bookLight = new THREE.PointLight(0xffeebb, 3.5, 24);
-    bookLight.position.set(HX, 2.3, HZ - 4);
-    scene.add(bookLight);
+    bookGroup.position.set(0, 1.5, -H_D / 2 + 4);
+    sceneAdd("house", bookGroup);
+    const bookLight = new THREE.PointLight(0xffeebb, 3.2, 26);
+    bookLight.position.set(0, 2.3, -H_D / 2 + 4);
+    sceneAdd("house", bookLight);
+    sceneAdd("house", new THREE.AmbientLight(0x5a4a30, 0.55));
+    sceneAdd("house", new THREE.HemisphereLight(0xffd58a, 0x2a1a10, 0.7));
+    const houseExit = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.15, 1.6), M.exitPad);
+    houseExit.position.set(0, 0.08, H_D / 2 - 1.5);
+    sceneAdd("house", houseExit);
+    addBox("house", 0, 0, H_D / 2 - 0.3, 4, 5, 0.4, M.doorWood, false);
 
-    // =========================================================
-    // BEACONS — glowing pillars of light marking the next objective
-    // =========================================================
+    // =====================================================================
+    // DOORS — surface entry points into each interior
+    // =====================================================================
+    const doors: Door[] = [
+      {
+        surfacePos: new THREE.Vector3(dormExt.doorX, 1, dormExt.doorZ - 1.2),
+        target: "dorm",
+        interiorSpawn: new THREE.Vector3(-D_W / 2 + 3.5, 1.7, 0),
+        interiorYaw: -Math.PI / 2, // face east (into the hall)
+        unlockAfter: -1, // always open (you start inside it)
+        label: "Enter the dormitory",
+        lockedLabel: "",
+        mesh: dormDoor,
+      },
+      {
+        surfacePos: new THREE.Vector3(COUNCIL_CX, 1, COUNCIL_CZ + 19),
+        target: "council",
+        interiorSpawn: new THREE.Vector3(0, 1.7, C_D / 2 - 3.5),
+        interiorYaw: Math.PI, // face north (toward altar)
+        unlockAfter: 3, // after meeting the Golden One
+        label: "Enter the Council Hall",
+        lockedLabel: "The Council door is sealed — meet the Golden One first",
+        mesh: councilDoor,
+      },
+      {
+        surfacePos: new THREE.Vector3(HX, 1, HZ + HD / 2 + 1.2),
+        target: "house",
+        interiorSpawn: new THREE.Vector3(0, 1.7, H_D / 2 - 3.5),
+        interiorYaw: Math.PI,
+        unlockAfter: 5, // after the forest
+        label: "Step into the glass house",
+        lockedLabel: "Walk the forest first",
+        mesh: houseDoor,
+      },
+    ];
+
+    // =====================================================================
+    // BEACONS (only on surface)
+    // =====================================================================
     const beaconForBeat: Record<string, THREE.Mesh> = {};
-    const makeBeacon = (id: string, x: number, z: number, color: number) => {
+    const makeBeacon = (id: string, x: number, z: number, color: number, key: SceneKey = "surface") => {
       const beam = new THREE.Mesh(
         new THREE.CylinderGeometry(0.25, 0.25, 80, 8, 1, true),
         new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.35, side: THREE.DoubleSide }),
       );
       beam.position.set(x, 40, z);
-      scene.add(beam);
+      sceneAdd(key, beam);
       beaconForBeat[id] = beam;
     };
-    makeBeacon("start", -48, -48, 0xffcc66);
+    // start beacon points at your cot inside the dorm (won't show on surface)
+    makeBeacon("start", 11, 11, 0xffcc66, "dorm");
     makeBeacon("tunnel_entry", GRATE_X, GRATE_Z, 0xff8844);
-    makeBeacon("field_meet", 20, 260, 0xffd070);
-    makeBeacon("council", 0, -200, 0xffaa66);
-    makeBeacon("forest", -220, 0, 0x88ffaa);
-    makeBeacon("house", HX, HZ, 0xff88dd);
-    makeBeacon("ego", HX, HZ - 4, 0xffffff);
-    // Underground beacon for the light box — only visible when in the tunnels
-    const ugBeacon = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.2, 0.2, 5, 8, 1, true),
-      new THREE.MeshBasicMaterial({ color: 0xfff0aa, transparent: true, opacity: 0.5, side: THREE.DoubleSide }),
-    );
-    ugBeacon.position.set(UG_OX, 2.5, -155);
-    undergroundGroup.add(ugBeacon);
+    makeBeacon("tunnel_light", CHX, CHZ - 2, 0xfff0aa, "underground");
+    makeBeacon("field_meet", 20, 250, 0xffd070);
+    makeBeacon("council", COUNCIL_CX, COUNCIL_CZ + 19, 0xffaa66);
+    makeBeacon("forest", FOREST_X, FOREST_Z, 0x88ffaa);
+    makeBeacon("house", HX, HZ + HD / 2 + 1.2, 0xff88dd);
+    makeBeacon("ego", 0, -H_D / 2 + 4, 0xffffff, "house");
 
-    // =========================================================
-    // INTERACTABLES
-    // =========================================================
+    // =====================================================================
+    // INTERACTABLES (each tied to a scene)
+    // =====================================================================
     const interactables: Interactable[] = [
-      { beatId: "start", position: new THREE.Vector3(-48, 1, -45), mesh: parchmentTable, label: "Read the parchment", order: 0 },
-      // tunnel_entry (order 1) is handled specially by the grate (open + descend)
-      { beatId: "tunnel_light", position: lightBox.position.clone(), mesh: lightBox, label: "Touch the light without fire", order: 2 },
-      { beatId: "field_meet", position: liberty.position.clone(), mesh: liberty, label: "Approach the Golden One", order: 3 },
-      { beatId: "council", position: altar.position.clone(), mesh: altar, label: "Present the light to the Council", order: 4 },
-      { beatId: "forest", position: new THREE.Vector3(-220, 1, 0), mesh: forestMarker, label: "Enter the Uncharted Forest", order: 5 },
-      { beatId: "house", position: new THREE.Vector3(HX, 1, HZ), mesh: houseFloor, label: "Step into the glass house", order: 6 },
-      { beatId: "ego", position: bookGroup.position.clone(), mesh: bookGroup, label: "Open the book", order: 7 },
+      { beatId: "start", position: new THREE.Vector3(11, 1, -2), label: "Take the parchment", order: 0, sceneKey: "dorm" },
+      // order 1 = grate (special-cased)
+      { beatId: "tunnel_light", position: new THREE.Vector3(CHX, 1, CHZ - 2), label: "Touch the light without fire", order: 2, sceneKey: "underground" },
+      { beatId: "field_meet", position: liberty.position.clone(), label: "Approach the Golden One", order: 3, sceneKey: "surface" },
+      { beatId: "council", position: new THREE.Vector3(0, 1, 0), label: "Present the light to the Council", order: 4, sceneKey: "council" },
+      { beatId: "forest", position: new THREE.Vector3(FOREST_X, 1, FOREST_Z), label: "Enter the Uncharted Forest", order: 5, sceneKey: "surface" },
+      { beatId: "house", position: new THREE.Vector3(0, 1, 0), label: "Look around the house", order: 6, sceneKey: "house" },
+      { beatId: "ego", position: new THREE.Vector3(0, 1.5, -H_D / 2 + 4), label: "Open the book", order: 7, sceneKey: "house" },
     ];
 
     const OBJECTIVES = [
-      "Read the parchment in the dormitory",
-      "Find the iron grating east of the city",
+      "Take the parchment from beneath your cot",
+      "Step outside — find the iron grating east of the city",
       "Descend into the tunnel — find the glowing box",
-      "Cross the south wall to the field — find the Golden One",
-      "Return north to the Council Hall",
+      "Climb out — cross the south wall to meet the Golden One",
+      "Return to the Council Hall — present the light",
       "Flee west — enter the Uncharted Forest",
       "Find the glass house deep in the forest",
       "Open the book — discover the sacred word",
     ];
     setObjective(OBJECTIVES[0]);
 
-    // ---------- SPAWN inside the dormitory ----------
-    camera.position.set(-48, 1.7, -48);
-    let yaw = Math.PI; // face the door (north door, looking +z... actually north door is -z; face -z)
-    yaw = 0; // facing -z (north door)
+    // =====================================================================
+    // STATE
+    // =====================================================================
+    let currentScene: SceneKey = "dorm"; // SPAWN INSIDE THE DORMITORY
+    groups.surface.visible = false;
+    groups.dorm.visible = true;
+
+    // Player starts inside the dormitory near the cot.
+    // Camera lives in WORLD coords, so we add the scene's X offset.
+    camera.position.set(SCENE_OFFSETS.dorm + (-D_W / 2 + 5), 1.7, 0);
+    let yaw = -Math.PI / 2;
     let pitch = 0;
 
-    // ---------- CONTROLS ----------
+    // `spawn` is in LOCAL coords of the target scene; we add the offset here.
+    const switchScene = (target: SceneKey, spawn: THREE.Vector3, yawNew: number) => {
+      groups[currentScene].visible = false;
+      currentScene = target;
+      groups[target].visible = true;
+      camera.position.set(SCENE_OFFSETS[target] + spawn.x, spawn.y, spawn.z);
+      yaw = yawNew;
+    };
+
+    // =====================================================================
+    // CONTROLS
+    // =====================================================================
     const keys: Record<string, boolean> = {};
     const onKey = (e: KeyboardEvent, down: boolean) => {
       keys[e.code] = down;
       if (down && e.code === "KeyE") tryInteract();
-      if (down && e.code === "Escape") {
-        setActiveBeat(null);
-        activeBeatRef.current = null;
-      }
+      if (down && e.code === "Escape") { setActiveBeat(null); activeBeatRef.current = null; }
     };
     const kd = (e: KeyboardEvent) => onKey(e, true);
     const ku = (e: KeyboardEvent) => onKey(e, false);
@@ -912,27 +1005,31 @@ export default function AnthemGame() {
       renderer.domElement.requestPointerLock();
     });
 
-    // ---------- UNDERGROUND STATE + COLLIDER SWAP ----------
-    let underground = false;
-    let activeColliders = colliders;
-    const gratePos = new THREE.Vector3(GRATE_X, 1, GRATE_Z);
-    const stairPos = new THREE.Vector3(UG_OX, 1, 5);
-
-    const descend = () => {
-      underground = true;
-      undergroundGroup.visible = true;
-      activeColliders = undergroundColliders;
-      camera.position.set(UG_OX, 1.7, 3);
-      yaw = Math.PI; // face -z toward the light box corridor (north)
+    // =====================================================================
+    // INTERACTION
+    // =====================================================================
+    const advanceTo = (order: number) => {
+      progressRef.current = order;
+      setProgress(order);
+      // Unlock gates that depended on lower order
+      for (const g of gates) {
+        if (!g.open && order > g.unlockAfter) {
+          g.open = true;
+          const idx = colliderSets.surface.indexOf(g.collider);
+          if (idx >= 0) colliderSets.surface.splice(idx, 1);
+          g.mesh.visible = false;
+        }
+      }
+      // Update door visuals (highlight unlocked doors)
+      for (const d of doors) {
+        if (d.mesh && order - 1 > d.unlockAfter) {
+          (d.mesh.material as THREE.MeshStandardMaterial).emissiveIntensity = 0.9;
+        }
+      }
+      if (order < OBJECTIVES.length) setObjective(OBJECTIVES[order]);
+      if (order >= STORY.length) setFinished(true);
     };
-    const ascend = () => {
-      underground = false;
-      undergroundGroup.visible = false;
-      activeColliders = colliders;
-      camera.position.set(GRATE_X, 1.7, GRATE_Z + 5);
-    };
 
-    // ---------- INTERACT ----------
     const tryInteract = () => {
       if (activeBeatRef.current) {
         setActiveBeat(null);
@@ -940,76 +1037,86 @@ export default function AnthemGame() {
         return;
       }
       const p = camera.position;
+      const localP = new THREE.Vector3(p.x - SCENE_OFFSETS[currentScene], p.y, p.z);
 
-      // Special: iron grating (open) then descend
-      if (!underground && p.distanceTo(gratePos) < 5.5) {
-        if (!grateOpen && progressRef.current === 1) {
-          grateOpen = true;
-          const beat = STORY.find((b) => b.id === "tunnel_entry")!;
-          setActiveBeat(beat);
-          activeBeatRef.current = beat;
-          progressRef.current = 2;
-          setProgress(2);
-          setObjective(OBJECTIVES[2]);
-          return;
-        }
-        if (grateOpen) {
-          descend();
-          return;
-        }
+      // INTERIOR — exit pads
+      if (currentScene === "dorm" && localP.distanceTo(dormExit.position) < 2.5) {
+        switchScene("surface", new THREE.Vector3(dormExt.doorX, 1.7, dormExt.doorZ - 1.5), 0);
+        return;
       }
-      // Special: stair back to surface (underground)
-      if (underground && p.distanceTo(stairPos) < 4) {
-        ascend();
+      if (currentScene === "council" && localP.distanceTo(councilExit.position) < 2.5) {
+        switchScene("surface", new THREE.Vector3(COUNCIL_CX, 1.7, COUNCIL_CZ + 21), 0);
+        return;
+      }
+      if (currentScene === "house" && localP.distanceTo(houseExit.position) < 2.5) {
+        switchScene("surface", new THREE.Vector3(HX, 1.7, HZ + HD / 2 + 2.5), 0);
+        return;
+      }
+      if (currentScene === "underground" && localP.distanceTo(stair.position) < 2.5) {
+        switchScene("surface", new THREE.Vector3(GRATE_X, 1.7, GRATE_Z + 5), Math.PI);
         return;
       }
 
+      // SURFACE — iron grating (open then descend)
+      if (currentScene === "surface") {
+        const dg = localP.distanceTo(new THREE.Vector3(GRATE_X, 1, GRATE_Z));
+        if (dg < 5) {
+          if (!grateOpen && progressRef.current === 1) {
+            grateOpen = true;
+            const beat = STORY.find(b => b.id === "tunnel_entry")!;
+            setActiveBeat(beat); activeBeatRef.current = beat;
+            advanceTo(2);
+            return;
+          }
+          if (grateOpen) {
+            switchScene("underground", new THREE.Vector3(0, 1.7, 4), Math.PI);
+            return;
+          }
+        }
+        // SURFACE — doors
+        for (const d of doors) {
+          if (localP.distanceTo(d.surfacePos) < 3) {
+            if (progressRef.current - 1 > d.unlockAfter || d.unlockAfter < 0) {
+              switchScene(d.target, d.interiorSpawn, d.interiorYaw);
+              return;
+            }
+          }
+        }
+      }
+
+      // Generic interactables in the current scene
       let best: Interactable | null = null;
       let bestD = 5.5;
       for (const it of interactables) {
+        if (it.sceneKey !== currentScene) continue;
         if (it.order !== progressRef.current) continue;
-        const d = p.distanceTo(it.position);
-        if (d < bestD) {
-          bestD = d;
-          best = it;
-        }
+        const d = localP.distanceTo(it.position);
+        if (d < bestD) { bestD = d; best = it; }
       }
       if (best) {
-        const beat = STORY.find((b) => b.id === best!.beatId)!;
-        setActiveBeat(beat);
-        activeBeatRef.current = beat;
-        progressRef.current = best.order + 1;
-        setProgress(progressRef.current);
-        for (const g of gates) {
-          if (!g.open && progressRef.current > g.unlockAfter) {
-            g.open = true;
-            const idx = colliders.indexOf(g.collider);
-            if (idx >= 0) colliders.splice(idx, 1);
-            g.mesh.visible = false;
-          }
-        }
-        if (best.order + 1 < OBJECTIVES.length) {
-          setObjective(OBJECTIVES[best.order + 1]);
-        } else {
-          setObjective("You found the word.");
-        }
-        if (best.order === STORY.length - 1) setFinished(true);
+        const beat = STORY.find(b => b.id === best!.beatId)!;
+        setActiveBeat(beat); activeBeatRef.current = beat;
+        advanceTo(best.order + 1);
       }
     };
 
-    // ---------- LOOP ----------
+    // =====================================================================
+    // RENDER LOOP
+    // =====================================================================
     const velocity = new THREE.Vector3();
     const tmpForward = new THREE.Vector3();
     const tmpRight = new THREE.Vector3();
     let last = performance.now();
     const startedAt = performance.now();
     let raf = 0;
+    let frame = 0;
 
     const tick = () => {
       const now = performance.now();
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
-      setElapsed(Math.floor((now - startedAt) / 1000));
+      frame++;
+      if (frame % 15 === 0) setElapsed(Math.floor((now - startedAt) / 1000));
 
       const q = new THREE.Quaternion();
       q.setFromEuler(new THREE.Euler(pitch, yaw, 0, "YXZ"));
@@ -1029,87 +1136,85 @@ export default function AnthemGame() {
       if (move.lengthSq() > 0) move.normalize().multiplyScalar(speed * dt);
       velocity.lerp(move, 0.4);
 
-      const next = camera.position.clone();
-      next.x += velocity.x;
-      const bx = new THREE.Box3(
-        new THREE.Vector3(next.x - 0.4, 0, camera.position.z - 0.4),
-        new THREE.Vector3(next.x + 0.4, 2, camera.position.z + 0.4),
-      );
-      if (!activeColliders.some((c) => c.box.intersectsBox(bx))) camera.position.x = next.x;
+      const activeColliders = colliderSets[currentScene];
+      const ox = SCENE_OFFSETS[currentScene];
 
-      next.copy(camera.position);
-      next.z += velocity.z;
-      const bz = new THREE.Box3(
-        new THREE.Vector3(camera.position.x - 0.4, 0, next.z - 0.4),
-        new THREE.Vector3(camera.position.x + 0.4, 2, next.z + 0.4),
+      // Collide in LOCAL space (subtract ox from camera.x to get local)
+      const lx = camera.position.x - ox, lz = camera.position.z;
+      const nextLX = lx + velocity.x;
+      const bx = new THREE.Box3(
+        new THREE.Vector3(nextLX - 0.4, 0, lz - 0.4),
+        new THREE.Vector3(nextLX + 0.4, 2, lz + 0.4),
       );
-      if (!activeColliders.some((c) => c.box.intersectsBox(bz))) camera.position.z = next.z;
+      if (!activeColliders.some(c => c.box.intersectsBox(bx))) camera.position.x += velocity.x;
+
+      const lx2 = camera.position.x - ox;
+      const nextLZ = lz + velocity.z;
+      const bz = new THREE.Box3(
+        new THREE.Vector3(lx2 - 0.4, 0, nextLZ - 0.4),
+        new THREE.Vector3(lx2 + 0.4, 2, nextLZ + 0.4),
+      );
+      if (!activeColliders.some(c => c.box.intersectsBox(bz))) camera.position.z += velocity.z;
 
       camera.position.y = 1.7;
 
-      // bobbing pickups
+      // bobs
       const t = now / 600;
-      lightBox.position.y = 1.0 + Math.sin(t) * 0.1;
+      lightBox.position.y = 1.15 + Math.sin(t) * 0.08;
       lightBox.rotation.y += dt * 0.6;
-      bookGroup.position.y = 1.5 + Math.sin(t * 0.8) * 0.08;
+      bookGroup.position.y = 1.5 + Math.sin(t * 0.8) * 0.07;
       bookGroup.rotation.y += dt * 0.3;
+      parchment.rotation.y += dt * 0.4;
       liberty.rotation.y = Math.sin(t * 0.5) * 0.3;
-      // pulsing gates
       for (const g of gates) {
         if (g.open) continue;
-        const mat = g.mesh.material as THREE.MeshStandardMaterial;
-        mat.emissiveIntensity = 0.4 + Math.sin(t * 2) * 0.25;
+        (g.mesh.material as THREE.MeshStandardMaterial).emissiveIntensity = 0.4 + Math.sin(t * 2) * 0.2;
       }
-      // grate slide animation
+      // grate slide
       if (grateOpen && grateSlideT < 1) {
         grateSlideT = Math.min(1, grateSlideT + dt * 1.2);
-        // slide east + sink slightly
         grate.position.x = GRATE_X + grateSlideT * 4.2;
         grate.position.y = 0.1 - grateSlideT * 0.05;
         grate.rotation.z = grateSlideT * 0.08;
       }
 
-      // beacons: only show next objective's beacon, and hide all when underground
+      // beacons: only the one matching the next beat, in any scene
       const nextBeatId = STORY[progressRef.current]?.id;
       for (const [id, m] of Object.entries(beaconForBeat)) {
-        m.visible = !underground && id === nextBeatId;
+        m.visible = id === nextBeatId;
       }
-      ugBeacon.visible = underground && nextBeatId === "tunnel_light";
 
       // nearby prompt
       let near: string | null = null;
-      // grate prompts (above ground)
-      if (!underground) {
-        const dg = camera.position.distanceTo(gratePos);
-        if (dg < 5.5) {
+      const localPos = new THREE.Vector3(camera.position.x - ox, camera.position.y, camera.position.z);
+
+      if (currentScene === "dorm" && localPos.distanceTo(dormExit.position) < 2.5) near = "Open the door — step outside";
+      else if (currentScene === "council" && localPos.distanceTo(councilExit.position) < 2.5) near = "Leave the Council Hall";
+      else if (currentScene === "house" && localPos.distanceTo(houseExit.position) < 2.5) near = "Leave the house";
+      else if (currentScene === "underground" && localPos.distanceTo(stair.position) < 2.5) near = "Climb back to the surface";
+      else if (currentScene === "surface") {
+        const dg = localPos.distanceTo(new THREE.Vector3(GRATE_X, 1, GRATE_Z));
+        if (dg < 5) {
           if (!grateOpen && progressRef.current === 1) near = "Lift the iron grating";
           else if (grateOpen) near = "Descend into the tunnel";
         }
-      } else {
-        const ds = camera.position.distanceTo(stairPos);
-        if (ds < 4) near = "Climb back to the surface";
-      }
-
-      if (!near) {
-        let nd = 5.5;
-        for (const it of interactables) {
-          if (it.order !== progressRef.current) continue;
-          const d = camera.position.distanceTo(it.position);
-          if (d < nd) {
-            nd = d;
-            near = it.label;
+        if (!near) {
+          for (const d of doors) {
+            if (localPos.distanceTo(d.surfacePos) < 3) {
+              near = (progressRef.current - 1 > d.unlockAfter || d.unlockAfter < 0)
+                ? d.label : d.lockedLabel;
+              break;
+            }
           }
         }
       }
-      if (!near && !underground) {
-        let gd = 6;
-        for (const g of gates) {
-          if (g.open) continue;
-          const d = camera.position.distanceTo(g.position);
-          if (d < gd) {
-            gd = d;
-            near = g.label;
-          }
+      if (!near) {
+        let nd = 5.5;
+        for (const it of interactables) {
+          if (it.sceneKey !== currentScene) continue;
+          if (it.order !== progressRef.current) continue;
+          const d = localPos.distanceTo(it.position);
+          if (d < nd) { nd = d; near = it.label; }
         }
       }
       setNearby(near);
@@ -1154,15 +1259,15 @@ export default function AnthemGame() {
             <h1 className="text-6xl font-serif tracking-wider">ANTHEM</h1>
             <p className="text-sm text-[#b8a37a] italic">after the novella by Ayn Rand</p>
             <p className="text-sm leading-relaxed text-[#c8b890]">
-              A semi-open world. You are Equality 7-2521. The city is vast and you may wander
-              freely — but the Council's doors stay sealed until each chapter is found. Follow
-              the beam of light to your next objective.
+              You wake on a cot in the Home of the Street Sweepers. Take the parchment, open the door,
+              and step into a city of stone where every chapter sleeps behind a locked door.
+              Follow the beam of light.
             </p>
             <div className="text-xs text-[#8a7a5a] grid grid-cols-2 gap-2 max-w-sm mx-auto pt-2">
               <div><span className="text-[#e8dcc0]">WASD</span> — walk</div>
               <div><span className="text-[#e8dcc0]">Shift</span> — run</div>
               <div><span className="text-[#e8dcc0]">Mouse</span> — look</div>
-              <div><span className="text-[#e8dcc0]">E</span> — interact / close</div>
+              <div><span className="text-[#e8dcc0]">E</span> — interact / enter / exit</div>
             </div>
             <button
               onClick={() => setStarted(true)}
@@ -1216,9 +1321,7 @@ export default function AnthemGame() {
                 className="max-w-2xl border border-[#c8a84a]/40 bg-[#15110b] p-10 space-y-5"
                 onClick={(e) => e.stopPropagation()}
               >
-                <h2 className="font-serif text-2xl tracking-wider text-[#e8c870]">
-                  {activeBeat.title}
-                </h2>
+                <h2 className="font-serif text-2xl tracking-wider text-[#e8c870]">{activeBeat.title}</h2>
                 <p className="text-[#d8c8a0] leading-relaxed whitespace-pre-line font-serif text-[15px]">
                   {activeBeat.body}
                 </p>
