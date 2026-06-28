@@ -1162,7 +1162,18 @@ export default function AnthemGame() {
       );
       if (!activeColliders.some(c => c.box.intersectsBox(bz))) camera.position.z += velocity.z;
 
-      camera.position.y = 1.7;
+      // jump + gravity
+      if (keys["Space"] && onGround && !activeBeatRef.current && document.pointerLockElement === renderer.domElement) {
+        vy = JUMP_V;
+        onGround = false;
+      }
+      vy -= GRAVITY * dt;
+      camera.position.y += vy * dt;
+      if (camera.position.y <= GROUND_Y) {
+        camera.position.y = GROUND_Y;
+        vy = 0;
+        onGround = true;
+      }
 
       // bobs
       const t = now / 600;
