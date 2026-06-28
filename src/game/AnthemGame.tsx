@@ -148,6 +148,141 @@ export default function AnthemGame() {
     mount.appendChild(renderer.domElement);
 
     // =====================================================================
+    // PROCEDURAL AUDIO (Web Audio API — no assets, starts on first gesture)
+    // =====================================================================
+    const AC = (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext);
+    const actx = new AC();
+    const masterGain = actx.createGain();
+    masterGain.gain.value = 0.55;
+    masterGain.connect(actx.destination);
+
+    // Reverb-ish: a short noise convolver for cathedral feel
+    const convolver = actx.createConvolver();
+    {
+      const len = actx.sampleRate * 2.2;
+      const buf = actx.createBuffer(2, len, actx.sampleRate);
+      for (let c = 0; c < 2; c++) {
+        const d = buf.getChannelData(c);
+        for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2.4);
+      }
+      convolver.buffer = buf;
+    }
+    const wetGain = actx.createGain();
+    wetGain.gain.value = 0.22;
+    convolver.connect(wetGain).connect(masterGain);
+
+    // Ambient drone — two detuned oscillators + slow LFO filter
+    const droneGain = actx.createGain();
+    droneGain.gain.value = 0;
+    droneGain.connect(masterGain);
+    droneGain.connect(convolver);
+    const droneFilter = actx.createBiquadFilter();
+    droneFilter.type = "lowpass";
+    droneFilter.frequency.value = 480;
+    droneFilter.Q.value = 4;
+    droneFilter.connect(droneGain);
+    const droneA = actx.createOscillator();
+    const droneB = actx.createOscillator();
+    const droneC = actx.createOscillator();
+    droneA.type = "sawtooth"; droneA.frequency.value = 55;
+    droneB.type = "sawtooth"; droneB.frequency.value = 55.4;
+    droneC.type = "sine"; droneC.frequency.value = 82.5;
+    droneA.connect(droneFilter); droneB.connect(droneFilter); droneC.connect(droneFilter);
+    const lfo = actx.createOscillator();
+    const lfoGain = actx.createGain();
+    lfo.frequency.value = 0.07;
+    lfoGain.gain.value = 220;
+    lfo.connect(lfoGain).connect(droneFilter.frequency);
+    droneA.start(); droneB.start(); droneC.start(); lfo.start();
+
+    // Wind/noise bed for outdoor scenes
+    const noiseBuf = actx.createBuffer(1, actx.sampleRate * 2, actx.sampleRate);
+    {
+      const d = noiseBuf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    }
+    const noiseSrc = actx.createBufferSource();
+    noiseSrc.buffer = noiseBuf;
+    noiseSrc.loop = true;
+    const noiseFilter = actx.createBiquadFilter();
+    noiseFilter.type = "bandpass";
+    noiseFilter.frequency.value = 600;
+    noiseFilter.Q.value = 0.6;
+    const noiseGain = actx.createGain();
+    noiseGain.gain.value = 0;
+    noiseSrc.connect(noiseFilter).connect(noiseGain).connect(masterGain);
+    noiseSrc.start();
+
+    const sceneAmbience: Record<string, { drone: number; freq: number; filter: number; wind: number }> = {
+      dorm:        { drone: 0.10, freq: 49,  filter: 320, wind: 0.00 },
+      surface:     { drone: 0.07, freq: 55,  filter: 520, wind: 0.06 },
+      underground: { drone: 0.16, freq: 41,  filter: 260, wind: 0.03 },
+      council:    { drone: 0.13, freq: 47,  filter: 360, wind: 0.00 },
+      house:       { drone: 0.08, freq: 65,  filter: 700, wind: 0.04 },
+    };
+
+    const applyAmbience = (key: string) => {
+      const a = sceneAmbience[key] ?? sceneAmbience.surface;
+      const now = actx.currentTime;
+      const m = mutedRef.current ? 0 : 1;
+      droneGain.gain.cancelScheduledValues(now);
+      droneGain.gain.linearRampToValueAtTime(a.drone * m, now + 1.2);
+      droneA.frequency.linearRampToValueAtTime(a.freq, now + 1.2);
+      droneB.frequency.linearRampToValueAtTime(a.freq * 1.008, now + 1.2);
+      droneC.frequency.linearRampToValueAtTime(a.freq * 1.5, now + 1.2);
+      droneFilter.frequency.linearRampToValueAtTime(a.filter, now + 1.2);
+      noiseGain.gain.cancelScheduledValues(now);
+      noiseGain.gain.linearRampToValueAtTime(a.wind * m, now + 1.5);
+    };
+
+    // SFX helpers
+    const blip = (freq: number, dur: number, type: OscillatorType = "sine", gain = 0.25, wet = 0.4) => {
+      if (mutedRef.current) return;
+      const t = actx.currentTime;
+      const o = actx.createOscillator();
+      const g = actx.createGain();
+      o.type = type;
+      o.frequency.setValueAtTime(freq, t);
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(gain, t + 0.005);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(g);
+      g.connect(masterGain);
+      const wg = actx.createGain(); wg.gain.value = wet;
+      g.connect(wg).connect(convolver);
+      o.start(t); o.stop(t + dur + 0.05);
+    };
+    const noiseBurst = (dur: number, freq: number, q: number, gain = 0.3, wet = 0.3) => {
+      if (mutedRef.current) return;
+      const t = actx.currentTime;
+      const src = actx.createBufferSource();
+      src.buffer = noiseBuf;
+      const f = actx.createBiquadFilter();
+      f.type = "bandpass"; f.frequency.value = freq; f.Q.value = q;
+      const g = actx.createGain();
+      g.gain.setValueAtTime(gain, t);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      src.connect(f).connect(g).connect(masterGain);
+      const wg = actx.createGain(); wg.gain.value = wet;
+      g.connect(wg).connect(convolver);
+      src.start(t); src.stop(t + dur + 0.05);
+    };
+    const sfx = {
+      footstep: () => noiseBurst(0.09, 220 + Math.random() * 80, 8, 0.18, 0.1),
+      jump:     () => { blip(420, 0.12, "sine", 0.18, 0.15); noiseBurst(0.08, 800, 4, 0.1, 0.1); },
+      land:     () => noiseBurst(0.14, 150, 5, 0.22, 0.2),
+      interact: () => { blip(660, 0.18, "triangle", 0.2, 0.5); setTimeout(() => blip(990, 0.22, "sine", 0.15, 0.6), 60); },
+      bell:     () => { blip(523, 1.2, "sine", 0.22, 0.9); blip(659, 1.2, "sine", 0.18, 0.9); blip(784, 1.4, "sine", 0.14, 0.9); },
+      door:     () => { noiseBurst(0.7, 180, 2, 0.28, 0.5); blip(110, 0.6, "sawtooth", 0.12, 0.4); },
+      metal:    () => { noiseBurst(0.35, 1800, 12, 0.3, 0.6); noiseBurst(0.5, 380, 3, 0.22, 0.5); },
+      portal:   () => { blip(180, 0.5, "sine", 0.2, 0.7); setTimeout(() => blip(360, 0.4, "sine", 0.16, 0.7), 100); setTimeout(() => blip(540, 0.35, "sine", 0.12, 0.7), 200); },
+    };
+
+    const resumeAudio = () => { if (actx.state === "suspended") actx.resume(); };
+
+
+
+    // =====================================================================
     // SCENE GROUPS — one per "map". Only the active one is visible.
     // =====================================================================
     const SCENE_OFFSETS: Record<SceneKey, number> = {
