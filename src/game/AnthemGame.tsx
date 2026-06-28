@@ -253,16 +253,16 @@ export default function AnthemGame() {
       mesh.position.set(x, y + h / 2, z);
       sceneAdd(key, mesh);
       if (solid) {
-        // Collider in LOCAL coordinates of the group (we'll test against the
-        // player's local position inside the active group).
-        const box = new THREE.Box3().setFromObject(mesh).expandByScalar(0.12);
-        // Strip the group's X offset back out — colliders are local.
-        const ox = SCENE_OFFSETS[key];
-        box.min.x -= ox; box.max.x -= ox;
+        // Local AABB computed directly — no world-matrix dependency.
+        const box = new THREE.Box3(
+          new THREE.Vector3(x - w / 2 - 0.05, y, z - d / 2 - 0.05),
+          new THREE.Vector3(x + w / 2 + 0.05, y + h, z + d / 2 + 0.05),
+        );
         colliderSets[key].push({ box });
       }
       return mesh;
     };
+
 
     /** Hollow building shell with a door gap. Returns door world coords + interior center. */
     const addBuilding = (
