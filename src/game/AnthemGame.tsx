@@ -981,6 +981,7 @@ export default function AnthemGame() {
     const keys: Record<string, boolean> = {};
     const onKey = (e: KeyboardEvent, down: boolean) => {
       keys[e.code] = down;
+      if (e.code === "Space" && document.pointerLockElement === renderer.domElement) e.preventDefault();
       if (down && e.code === "KeyE") tryInteract();
       if (down && e.code === "Escape") { setActiveBeat(null); activeBeatRef.current = null; }
     };
