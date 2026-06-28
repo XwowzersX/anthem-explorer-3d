@@ -660,28 +660,38 @@ export default function AnthemGame() {
       sceneAdd("underground", c);
       // walls
       const nx = -Math.sin(angle), nz = Math.cos(angle);
+      const tx = Math.cos(angle), tz = Math.sin(angle); // tangent along corridor
+      const ax = Math.abs(tx) * (len / 2) + Math.abs(nx) * 0.2;
+      const az = Math.abs(tz) * (len / 2) + Math.abs(nz) * 0.2;
       for (const sgn of [-1, 1]) {
+        const wx = cx + nx * (width / 2) * sgn;
+        const wz = cz + nz * (width / 2) * sgn;
         const wallMesh = new THREE.Mesh(new THREE.BoxGeometry(len, height, 0.4), M.tunnelWall);
-        wallMesh.position.set(cx + nx * (width / 2) * sgn, height / 2, cz + nz * (width / 2) * sgn);
+        wallMesh.position.set(wx, height / 2, wz);
         wallMesh.rotation.y = -angle;
         sceneAdd("underground", wallMesh);
-        const box = new THREE.Box3().setFromObject(wallMesh).expandByScalar(0.1);
-        // strip x offset
-        box.min.x -= SCENE_OFFSETS.underground;
-        box.max.x -= SCENE_OFFSETS.underground;
+        const box = new THREE.Box3(
+          new THREE.Vector3(wx - ax - 0.05, 0, wz - az - 0.05),
+          new THREE.Vector3(wx + ax + 0.05, height, wz + az + 0.05),
+        );
         colliderSets.underground.push({ box });
       }
       if (capFar) {
-        // End cap wall perpendicular to corridor at the far end
+        // End cap wall perpendicular to corridor at the far end (rotated 90°)
         const cap = new THREE.Mesh(new THREE.BoxGeometry(width, height, 0.4), M.tunnelWall);
         cap.position.set(toX, height / 2, toZ);
         cap.rotation.y = -angle + Math.PI / 2;
         sceneAdd("underground", cap);
-        const box = new THREE.Box3().setFromObject(cap).expandByScalar(0.1);
-        box.min.x -= SCENE_OFFSETS.underground;
-        box.max.x -= SCENE_OFFSETS.underground;
+        // After +90° rotation, the cap's length runs along the normal axis.
+        const cax = Math.abs(nx) * (width / 2) + Math.abs(tx) * 0.2;
+        const caz = Math.abs(nz) * (width / 2) + Math.abs(tz) * 0.2;
+        const box = new THREE.Box3(
+          new THREE.Vector3(toX - cax - 0.05, 0, toZ - caz - 0.05),
+          new THREE.Vector3(toX + cax + 0.05, height, toZ + caz + 0.05),
+        );
         colliderSets.underground.push({ box });
       }
+
       // rails
       for (const sgn of [-1, 1]) {
         const rail = new THREE.Mesh(new THREE.BoxGeometry(len, 0.1, 0.1), M.rail);
