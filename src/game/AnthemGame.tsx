@@ -1034,7 +1034,7 @@ export default function AnthemGame() {
       }
       // Update door visuals (highlight unlocked doors)
       for (const d of doors) {
-        if (d.mesh && order - 1 > d.unlockAfter) {
+        if (d.mesh && order - 1 >= d.unlockAfter) {
           (d.mesh.material as THREE.MeshStandardMaterial).emissiveIntensity = 0.9;
         }
       }
@@ -1088,7 +1088,7 @@ export default function AnthemGame() {
         // SURFACE — doors
         for (const d of doors) {
           if (localP.distanceTo(d.surfacePos) < 3) {
-            if (progressRef.current - 1 > d.unlockAfter || d.unlockAfter < 0) {
+            if (progressRef.current - 1 >= d.unlockAfter || d.unlockAfter < 0) {
               switchScene(d.target, d.interiorSpawn, d.interiorYaw);
               return;
             }
@@ -1230,7 +1230,7 @@ export default function AnthemGame() {
         if (!near) {
           for (const d of doors) {
             if (localPos.distanceTo(d.surfacePos) < 3) {
-              near = (progressRef.current - 1 > d.unlockAfter || d.unlockAfter < 0)
+              near = (progressRef.current - 1 >= d.unlockAfter || d.unlockAfter < 0)
                 ? d.label : d.lockedLabel;
               break;
             }
