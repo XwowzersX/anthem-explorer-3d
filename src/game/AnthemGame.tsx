@@ -1258,9 +1258,12 @@ export default function AnthemGame() {
       if (best) {
         const beat = STORY.find(b => b.id === best!.beatId)!;
         setActiveBeat(beat); activeBeatRef.current = beat;
+        sfx.interact();
+        sfx.bell();
         advanceTo(best.order + 1);
       }
     };
+
 
     // =====================================================================
     // RENDER LOOP
