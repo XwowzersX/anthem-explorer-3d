@@ -1237,11 +1237,13 @@ export default function AnthemGame() {
         for (const d of doors) {
           if (localP.distanceTo(d.surfacePos) < 3) {
             if (progressRef.current - 1 >= d.unlockAfter || d.unlockAfter < 0) {
+              sfx.door();
               switchScene(d.target, d.interiorSpawn, d.interiorYaw);
               return;
             }
           }
         }
+
       }
 
       // Generic interactables in the current scene
