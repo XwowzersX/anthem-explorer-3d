@@ -981,6 +981,7 @@ export default function AnthemGame() {
     const keys: Record<string, boolean> = {};
     const onKey = (e: KeyboardEvent, down: boolean) => {
       keys[e.code] = down;
+      if (e.code === "Space" && document.pointerLockElement === renderer.domElement) e.preventDefault();
       if (down && e.code === "KeyE") tryInteract();
       if (down && e.code === "Escape") { setActiveBeat(null); activeBeatRef.current = null; }
     };
@@ -1110,6 +1111,12 @@ export default function AnthemGame() {
     const startedAt = performance.now();
     let raf = 0;
     let frame = 0;
+    let vy = 0;
+    let onGround = true;
+    const GRAVITY = 22;
+    const JUMP_V = 8;
+    const GROUND_Y = 1.7;
+
 
     const tick = () => {
       const now = performance.now();
@@ -1156,7 +1163,18 @@ export default function AnthemGame() {
       );
       if (!activeColliders.some(c => c.box.intersectsBox(bz))) camera.position.z += velocity.z;
 
-      camera.position.y = 1.7;
+      // jump + gravity
+      if (keys["Space"] && onGround && !activeBeatRef.current && document.pointerLockElement === renderer.domElement) {
+        vy = JUMP_V;
+        onGround = false;
+      }
+      vy -= GRAVITY * dt;
+      camera.position.y += vy * dt;
+      if (camera.position.y <= GROUND_Y) {
+        camera.position.y = GROUND_Y;
+        vy = 0;
+        onGround = true;
+      }
 
       // bobs
       const t = now / 600;
@@ -1266,6 +1284,7 @@ export default function AnthemGame() {
             <div className="text-xs text-[#8a7a5a] grid grid-cols-2 gap-2 max-w-sm mx-auto pt-2">
               <div><span className="text-[#e8dcc0]">WASD</span> — walk</div>
               <div><span className="text-[#e8dcc0]">Shift</span> — run</div>
+              <div><span className="text-[#e8dcc0]">Space</span> — jump</div>
               <div><span className="text-[#e8dcc0]">Mouse</span> — look</div>
               <div><span className="text-[#e8dcc0]">E</span> — interact / enter / exit</div>
             </div>
