@@ -1220,11 +1220,14 @@ export default function AnthemGame() {
         if (dg < 5) {
           if (!grateOpen && progressRef.current === 1) {
             grateOpen = true;
+            sfx.metal();
             const beat = STORY.find(b => b.id === "tunnel_entry")!;
             setActiveBeat(beat); activeBeatRef.current = beat;
+            sfx.bell();
             advanceTo(2);
             return;
           }
+
           if (grateOpen) {
             switchScene("underground", new THREE.Vector3(0, 1.7, 4), Math.PI);
             return;
