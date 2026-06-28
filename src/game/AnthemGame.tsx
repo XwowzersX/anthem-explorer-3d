@@ -1280,6 +1280,9 @@ export default function AnthemGame() {
     const GRAVITY = 22;
     const JUMP_V = 8;
     const GROUND_Y = 1.7;
+    let stepAccum = 0;
+
+
 
 
     const tick = () => {
