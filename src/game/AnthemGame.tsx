@@ -1495,10 +1495,17 @@ export default function AnthemGame() {
               ▸ {objective}
             </div>
           </div>
-          <div className="absolute top-4 right-4 z-10 text-right text-xs uppercase tracking-widest text-[#8a7a5a] pointer-events-none">
-            <div>WASD · Mouse · E</div>
-            <div className="text-[#6a5a40] normal-case tracking-normal pt-1">Follow the beam of light</div>
+          <div className="absolute top-4 right-4 z-10 text-right text-xs uppercase tracking-widest text-[#8a7a5a]">
+            <div className="pointer-events-none">WASD · Mouse · E</div>
+            <div className="text-[#6a5a40] normal-case tracking-normal pt-1 pointer-events-none">Follow the beam of light</div>
+            <button
+              onClick={() => setMuted(m => !m)}
+              className="mt-2 px-3 py-1 border border-[#c8a84a]/40 bg-black/40 text-[#e8dcc0] hover:bg-[#c8a84a]/20 text-[10px]"
+            >
+              {muted ? "Sound: Off" : "Sound: On"}
+            </button>
           </div>
+
 
           {locked && !activeBeat && (
             <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full bg-[#e8dcc0]/70 pointer-events-none" />
