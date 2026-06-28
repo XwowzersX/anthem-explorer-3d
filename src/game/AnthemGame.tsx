@@ -973,6 +973,7 @@ export default function AnthemGame() {
       groups[target].visible = true;
       camera.position.set(SCENE_OFFSETS[target] + spawn.x, spawn.y, spawn.z);
       yaw = yawNew;
+      console.log("[scene]", target, "colliders=", colliderSets[target].length, "spawn", spawn);
     };
 
     // =====================================================================
