@@ -1108,6 +1108,7 @@ export default function AnthemGame() {
     let currentScene: SceneKey = "dorm"; // SPAWN INSIDE THE DORMITORY
     groups.surface.visible = false;
     groups.dorm.visible = true;
+    applyAmbience(currentScene);
 
     // Player starts inside the dormitory near the cot.
     // Camera lives in WORLD coords, so we add the scene's X offset.
@@ -1122,8 +1123,11 @@ export default function AnthemGame() {
       groups[target].visible = true;
       camera.position.set(SCENE_OFFSETS[target] + spawn.x, spawn.y, spawn.z);
       yaw = yawNew;
+      sfx.portal();
+      applyAmbience(target);
       console.log("[scene]", target, "colliders=", colliderSets[target].length, "spawn", spawn);
     };
+
 
     // =====================================================================
     // CONTROLS
