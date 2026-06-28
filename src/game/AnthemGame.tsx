@@ -1110,6 +1110,12 @@ export default function AnthemGame() {
     const startedAt = performance.now();
     let raf = 0;
     let frame = 0;
+    let vy = 0;
+    let onGround = true;
+    const GRAVITY = 22;
+    const JUMP_V = 8;
+    const GROUND_Y = 1.7;
+
 
     const tick = () => {
       const now = performance.now();
