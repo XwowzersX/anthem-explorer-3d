@@ -1230,7 +1230,7 @@ export default function AnthemGame() {
         if (!near) {
           for (const d of doors) {
             if (localPos.distanceTo(d.surfacePos) < 3) {
-              near = (progressRef.current - 1 > d.unlockAfter || d.unlockAfter < 0)
+              near = (progressRef.current - 1 >= d.unlockAfter || d.unlockAfter < 0)
                 ? d.label : d.lockedLabel;
               break;
             }
