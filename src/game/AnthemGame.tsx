@@ -159,8 +159,10 @@ export default function AnthemGame() {
     const AC = (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext);
     const actx = new AC();
     const masterGain = actx.createGain();
-    masterGain.gain.value = 0.55;
+    masterGain.gain.value = mutedRef.current ? 0 : 0.55;
     masterGain.connect(actx.destination);
+    masterGainRef.current = masterGain;
+
 
     // Reverb-ish: a short noise convolver for cathedral feel
     const convolver = actx.createConvolver();
