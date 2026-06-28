@@ -1088,7 +1088,7 @@ export default function AnthemGame() {
         // SURFACE — doors
         for (const d of doors) {
           if (localP.distanceTo(d.surfacePos) < 3) {
-            if (progressRef.current - 1 > d.unlockAfter || d.unlockAfter < 0) {
+            if (progressRef.current - 1 >= d.unlockAfter || d.unlockAfter < 0) {
               switchScene(d.target, d.interiorSpawn, d.interiorYaw);
               return;
             }
