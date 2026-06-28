@@ -1034,7 +1034,7 @@ export default function AnthemGame() {
       }
       // Update door visuals (highlight unlocked doors)
       for (const d of doors) {
-        if (d.mesh && order - 1 > d.unlockAfter) {
+        if (d.mesh && order - 1 >= d.unlockAfter) {
           (d.mesh.material as THREE.MeshStandardMaterial).emissiveIntensity = 0.9;
         }
       }
