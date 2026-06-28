@@ -120,7 +120,13 @@ export default function AnthemGame() {
   const [objective, setObjective] = useState<string>("Take the parchment from beneath your cot");
   const [muted, setMuted] = useState(false);
   const mutedRef = useRef(false);
-  useEffect(() => { mutedRef.current = muted; }, [muted]);
+  const masterGainRef = useRef<GainNode | null>(null);
+  useEffect(() => {
+    mutedRef.current = muted;
+    const g = masterGainRef.current;
+    if (g) g.gain.setTargetAtTime(muted ? 0 : 0.55, g.context.currentTime, 0.05);
+  }, [muted]);
+
 
   const progressRef = useRef(0);
   const activeBeatRef = useRef<Beat | null>(null);
