@@ -118,9 +118,13 @@ export default function AnthemGame() {
   const [elapsed, setElapsed] = useState(0);
   const [finished, setFinished] = useState(false);
   const [objective, setObjective] = useState<string>("Take the parchment from beneath your cot");
+  const [muted, setMuted] = useState(false);
+  const mutedRef = useRef(false);
+  useEffect(() => { mutedRef.current = muted; }, [muted]);
 
   const progressRef = useRef(0);
   const activeBeatRef = useRef<Beat | null>(null);
+
 
   useEffect(() => {
     if (!started || !mountRef.current) return;
