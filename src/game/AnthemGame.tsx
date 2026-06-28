@@ -1284,6 +1284,7 @@ export default function AnthemGame() {
             <div className="text-xs text-[#8a7a5a] grid grid-cols-2 gap-2 max-w-sm mx-auto pt-2">
               <div><span className="text-[#e8dcc0]">WASD</span> — walk</div>
               <div><span className="text-[#e8dcc0]">Shift</span> — run</div>
+              <div><span className="text-[#e8dcc0]">Space</span> — jump</div>
               <div><span className="text-[#e8dcc0]">Mouse</span> — look</div>
               <div><span className="text-[#e8dcc0]">E</span> — interact / enter / exit</div>
             </div>
