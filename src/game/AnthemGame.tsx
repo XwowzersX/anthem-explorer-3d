@@ -1327,18 +1327,35 @@ export default function AnthemGame() {
       );
       if (!activeColliders.some(c => c.box.intersectsBox(bz))) camera.position.z += velocity.z;
 
+      // footstep cadence
+      const horizSpeed = Math.hypot(velocity.x, velocity.z);
+      if (onGround && horizSpeed > 0.02) {
+        stepAccum += horizSpeed;
+        const cadence = (keys["ShiftLeft"] || keys["ShiftRight"]) ? 0.55 : 0.85;
+        if (stepAccum > cadence) {
+          stepAccum = 0;
+          sfx.footstep();
+        }
+      } else {
+        stepAccum = Math.max(0, stepAccum - dt);
+      }
+
       // jump + gravity
       if (keys["Space"] && onGround && !activeBeatRef.current && document.pointerLockElement === renderer.domElement) {
         vy = JUMP_V;
         onGround = false;
+        sfx.jump();
       }
       vy -= GRAVITY * dt;
       camera.position.y += vy * dt;
       if (camera.position.y <= GROUND_Y) {
+        const wasFalling = !onGround;
         camera.position.y = GROUND_Y;
         vy = 0;
+        if (wasFalling) sfx.land();
         onGround = true;
       }
+
 
       // bobs
       const t = now / 600;
