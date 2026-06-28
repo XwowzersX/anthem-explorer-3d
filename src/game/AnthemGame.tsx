@@ -1156,9 +1156,11 @@ export default function AnthemGame() {
     document.addEventListener("pointerlockchange", lockChange);
 
     renderer.domElement.addEventListener("click", () => {
+      resumeAudio();
       if (activeBeatRef.current) return;
       renderer.domElement.requestPointerLock();
     });
+
 
     // =====================================================================
     // INTERACTION
