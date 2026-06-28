@@ -1440,11 +1440,14 @@ export default function AnthemGame() {
       window.removeEventListener("mousemove", onMouseMove);
       window.removeEventListener("resize", onResize);
       document.removeEventListener("pointerlockchange", lockChange);
+      try { droneA.stop(); droneB.stop(); droneC.stop(); lfo.stop(); noiseSrc.stop(); } catch { /* already stopped */ }
+      actx.close();
       renderer.dispose();
       if (renderer.domElement.parentElement === mount) {
         mount.removeChild(renderer.domElement);
       }
     };
+
   }, [started]);
 
   const mm = String(Math.floor(elapsed / 60)).padStart(2, "0");
