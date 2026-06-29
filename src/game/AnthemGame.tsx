@@ -1816,6 +1816,12 @@ export default function AnthemGame() {
             <div className="text-[#e8c870] normal-case tracking-normal text-sm pt-2 max-w-xs">
               ▸ {objective}
             </div>
+            <div className="pt-2 flex gap-3 text-[10px]">
+              <span className={hasLantern ? "text-[#ffb070]" : "text-[#5a5040]"}>
+                {hasLantern ? "🏮 Lantern" : "○ No lantern"}
+              </span>
+              <span className="text-[#e8c870]">✦ Fragments {fragments}/3</span>
+            </div>
           </div>
           <div className="absolute top-4 right-4 z-10 text-right text-xs uppercase tracking-widest text-[#8a7a5a]">
             <div className="pointer-events-none">WASD · Mouse · E</div>
