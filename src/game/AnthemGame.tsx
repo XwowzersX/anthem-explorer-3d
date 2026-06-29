@@ -119,8 +119,15 @@ export default function AnthemGame() {
   const [finished, setFinished] = useState(false);
   const [objective, setObjective] = useState<string>("Take the parchment from beneath your cot");
   const [muted, setMuted] = useState(false);
+  const [hasLantern, setHasLantern] = useState(false);
+  const [fragments, setFragments] = useState(0);
+  const [npcLine, setNpcLine] = useState<{ name: string; line: string } | null>(null);
   const mutedRef = useRef(false);
   const masterGainRef = useRef<GainNode | null>(null);
+  const hasLanternRef = useRef(false);
+  const fragmentsRef = useRef(0);
+  const npcLineRef = useRef<{ name: string; line: string } | null>(null);
+  useEffect(() => { npcLineRef.current = npcLine; }, [npcLine]);
   useEffect(() => {
     mutedRef.current = muted;
     const g = masterGainRef.current;
@@ -1131,6 +1138,144 @@ export default function AnthemGame() {
     addBox("house", 0, 0, H_D / 2 - 0.3, 4, 5, 0.4, M.doorWood, false);
 
     // =====================================================================
+    // NPCs — silent brothers of the city with dialogue
+    // =====================================================================
+    type NPC = {
+      sceneKey: SceneKey;
+      position: THREE.Vector3;
+      name: string;
+      lines: string[];
+      idx: number;
+      mesh: THREE.Group;
+    };
+    const npcs: NPC[] = [];
+    const makeNPC = (
+      key: SceneKey, x: number, z: number,
+      robe: number, hair: number, name: string, lines: string[],
+    ) => {
+      const g = new THREE.Group();
+      const bd = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.42, 0.5, 1.7, 10),
+        new THREE.MeshStandardMaterial({ color: robe, roughness: 0.95 }),
+      );
+      bd.position.y = 0.85; g.add(bd);
+      const hd = new THREE.Mesh(
+        new THREE.SphereGeometry(0.3, 12, 10),
+        new THREE.MeshStandardMaterial({ color: 0xe8c8a8, roughness: 0.8 }),
+      );
+      hd.position.y = 1.95; g.add(hd);
+      const hr = new THREE.Mesh(
+        new THREE.SphereGeometry(0.32, 10, 8),
+        new THREE.MeshStandardMaterial({ color: hair, roughness: 0.9 }),
+      );
+      hr.position.y = 2.05; hr.scale.y = 0.65; g.add(hr);
+      g.position.set(x, 0, z);
+      sceneAdd(key, g);
+      // soft collider so you can't walk through them
+      colliderSets[key].push({
+        box: new THREE.Box3(
+          new THREE.Vector3(x - 0.6, 0, z - 0.6),
+          new THREE.Vector3(x + 0.6, 2.2, z + 0.6),
+        ),
+      });
+      const npc: NPC = { sceneKey: key, position: new THREE.Vector3(x, 1, z), name, lines, idx: 0, mesh: g };
+      npcs.push(npc);
+      return npc;
+    };
+
+    // International 4-8818 — your only friend, in the dormitory
+    makeNPC("dorm", 6, 0, 0x4a4030, 0x2a1a08, "International 4-8818", [
+      "We are International 4-8818. We laugh when no others laugh. They beat us for it.",
+      "You hide things, Equality 7-2521. We see. We will say nothing.",
+      "If you find what lies beneath the iron grating, we will follow you into the dark.",
+    ]);
+    // The Teacher — central plaza, recites the creed
+    makeNPC("surface", -6, 6, 0x2a3a4a, 0x1a1a1a, "Teacher 0521", [
+      "We are nothing. Mankind is all. We exist through, by, and for our brothers.",
+      "There is no transgression blacker than to do or think alone.",
+      "Why do your eyes wander to the iron grating, street sweeper? Look at the ground.",
+    ]);
+    // A frightened scholar outside the Council
+    makeNPC("surface", -8, -140, 0x6a4a2a, 0x3a2a1a, "Collective 0-0009", [
+      "The Council convenes within. Do not approach unless summoned.",
+      "Strange — the lamps in the city have flickered since the last storm.",
+      "If you bring them a thing not given by the Council… run, brother. Just run.",
+    ]);
+    // A wanderer at the edge of the field
+    makeNPC("surface", 18, 220, 0x3a4a3a, 0x4a3a1a, "Solidarity 9-6347", [
+      "The Golden One tends the fields. We are forbidden to look at her.",
+      "Some nights she sings without words. The Council does not know.",
+    ]);
+
+    // =====================================================================
+    // PICKUPS — lantern (required) + 3 hidden forbidden fragments
+    // =====================================================================
+    type Pickup = {
+      kind: "lantern" | "fragment";
+      sceneKey: SceneKey;
+      position: THREE.Vector3;
+      mesh: THREE.Object3D;
+      taken: boolean;
+      label: string;
+    };
+    const pickups: Pickup[] = [];
+
+    // Forge stall near the grate (cobble pillars + a roof + the lantern on a peg)
+    const FORGE_X = GRATE_X - 14, FORGE_Z = GRATE_Z - 4;
+    addBox("surface", FORGE_X - 2, 0, FORGE_Z, 0.4, 3.2, 0.4, M.bedFrame);
+    addBox("surface", FORGE_X + 2, 0, FORGE_Z, 0.4, 3.2, 0.4, M.bedFrame);
+    addBox("surface", FORGE_X, 3.2, FORGE_Z, 5, 0.3, 3, M.roof, false);
+    addBox("surface", FORGE_X, 0, FORGE_Z - 1.2, 4, 1.1, 1.8, M.stone3, false); // anvil bench
+    const lanternHook = new THREE.Group();
+    const lanternBody = new THREE.Mesh(
+      new THREE.BoxGeometry(0.45, 0.7, 0.45),
+      new THREE.MeshStandardMaterial({ color: 0x4a3a20, emissive: 0xffb060, emissiveIntensity: 1.4, metalness: 0.4, roughness: 0.5 }),
+    );
+    lanternHook.add(lanternBody);
+    lanternHook.position.set(FORGE_X, 2.0, FORGE_Z - 0.3);
+    sceneAdd("surface", lanternHook);
+    const lanternHookLight = new THREE.PointLight(0xffb060, 1.8, 14);
+    lanternHookLight.position.set(FORGE_X, 2.4, FORGE_Z - 0.3);
+    sceneAdd("surface", lanternHookLight);
+    pickups.push({
+      kind: "lantern", sceneKey: "surface",
+      position: new THREE.Vector3(FORGE_X, 1, FORGE_Z - 0.3),
+      mesh: lanternHook, taken: false,
+      label: "Take the iron lantern",
+    });
+
+    // 3 forbidden fragments hidden across the world
+    const fragMat = new THREE.MeshStandardMaterial({
+      color: 0xe8d4a0, emissive: 0xff6020, emissiveIntensity: 1.6, metalness: 0.3, roughness: 0.3,
+    });
+    const placeFragment = (key: SceneKey, x: number, y: number, z: number, hint: string) => {
+      const f = new THREE.Mesh(new THREE.TetrahedronGeometry(0.35), fragMat);
+      f.position.set(x, y, z);
+      sceneAdd(key, f);
+      pickups.push({
+        kind: "fragment", sceneKey: key,
+        position: new THREE.Vector3(x, y, z),
+        mesh: f, taken: false,
+        label: hint,
+      });
+    };
+    // 1) Behind a building in the city
+    placeFragment("surface", 64, 1.2, 36, "Pick up the shard — a relic of the Unmentionable Times");
+    // 2) Deep in the forest
+    placeFragment("surface", -340, 1.2, 90, "Pick up the shard — a relic of the Unmentionable Times");
+    // 3) Tucked in a dead-end underground corridor
+    placeFragment("underground", 100, 1.2, 0, "Pick up the shard — a relic of the Unmentionable Times");
+
+    // =====================================================================
+    // PLAYER-CARRIED LANTERN — point light parented to camera
+    // =====================================================================
+    const carriedLantern = new THREE.PointLight(0xffb070, 0.0, 22);
+    carriedLantern.position.set(0.4, -0.2, -0.3);
+    camera.add(carriedLantern);
+    scene.add(camera); // camera must be in scene graph for its children to render
+
+
+    // =====================================================================
     // DOORS — surface entry points into each interior
     // =====================================================================
     const doors: Door[] = [
@@ -1306,8 +1451,41 @@ export default function AnthemGame() {
         activeBeatRef.current = null;
         return;
       }
+      if (npcLineRef.current) { npcLineRef.current = null; setNpcLine(null); return; }
       const p = camera.position;
       const localP = new THREE.Vector3(p.x - SCENE_OFFSETS[currentScene], p.y, p.z);
+
+      // PICKUPS first — they're small and easy to miss
+      for (const pk of pickups) {
+        if (pk.taken || pk.sceneKey !== currentScene) continue;
+        if (localP.distanceTo(pk.position) < 2.2) {
+          pk.taken = true;
+          pk.mesh.visible = false;
+          sfx.interact();
+          if (pk.kind === "lantern") {
+            hasLanternRef.current = true;
+            setHasLantern(true);
+            carriedLantern.intensity = 2.2;
+          } else {
+            fragmentsRef.current += 1;
+            setFragments(fragmentsRef.current);
+            sfx.bell();
+          }
+          return;
+        }
+      }
+
+      // NPCs — cycle through their lines
+      for (const n of npcs) {
+        if (n.sceneKey !== currentScene) continue;
+        if (localP.distanceTo(n.position) < 2.8) {
+          const line = n.lines[n.idx % n.lines.length];
+          n.idx += 1;
+          setNpcLine({ name: n.name, line });
+          sfx.interact();
+          return;
+        }
+      }
 
       // INTERIOR — exit pads
       if (currentScene === "dorm" && localP.distanceTo(dormExit.position) < 2.5) {
@@ -1342,6 +1520,10 @@ export default function AnthemGame() {
           }
 
           if (grateOpen) {
+            if (!hasLanternRef.current) {
+              setNpcLine({ name: "—", line: "The shaft is pitch black. You need a lantern. There is a forge stall nearby." });
+              return;
+            }
             switchScene("underground", new THREE.Vector3(0, 1.7, 4), Math.PI);
             return;
           }
@@ -1511,7 +1693,7 @@ export default function AnthemGame() {
         const dg = localPos.distanceTo(new THREE.Vector3(GRATE_X, 1, GRATE_Z));
         if (dg < 5) {
           if (!grateOpen && progressRef.current === 1) near = "Lift the iron grating";
-          else if (grateOpen) near = "Descend into the tunnel";
+          else if (grateOpen) near = hasLanternRef.current ? "Descend into the tunnel" : "Pitch black below — find a lantern first";
         }
         if (!near) {
           for (const d of doors) {
@@ -1523,6 +1705,20 @@ export default function AnthemGame() {
           }
         }
       }
+      // pickups
+      if (!near) {
+        for (const pk of pickups) {
+          if (pk.taken || pk.sceneKey !== currentScene) continue;
+          if (localPos.distanceTo(pk.position) < 2.2) { near = pk.label; break; }
+        }
+      }
+      // NPCs
+      if (!near) {
+        for (const n of npcs) {
+          if (n.sceneKey !== currentScene) continue;
+          if (localPos.distanceTo(n.position) < 2.8) { near = `Speak with ${n.name}`; break; }
+        }
+      }
       if (!near) {
         let nd = 5.5;
         for (const it of interactables) {
@@ -1531,6 +1727,21 @@ export default function AnthemGame() {
           const d = localPos.distanceTo(it.position);
           if (d < nd) { nd = d; near = it.label; }
         }
+      }
+      // lantern flicker while carrying
+      if (hasLanternRef.current) {
+        carriedLantern.intensity = 1.9 + Math.sin(now * 0.012) * 0.25 + (Math.random() - 0.5) * 0.15;
+      }
+      // pickup bob
+      for (const pk of pickups) {
+        if (!pk.taken) pk.mesh.rotation.y += dt * 1.2;
+      }
+      // npc face-player
+      for (const n of npcs) {
+        if (n.sceneKey !== currentScene) continue;
+        const dx = camera.position.x - SCENE_OFFSETS[currentScene] - n.mesh.position.x;
+        const dz = camera.position.z - n.mesh.position.z;
+        n.mesh.rotation.y = Math.atan2(dx, dz);
       }
       setNearby(near);
 
@@ -1607,6 +1818,12 @@ export default function AnthemGame() {
             <div className="text-[#e8c870] normal-case tracking-normal text-sm pt-2 max-w-xs">
               ▸ {objective}
             </div>
+            <div className="pt-2 flex gap-3 text-[10px]">
+              <span className={hasLantern ? "text-[#ffb070]" : "text-[#5a5040]"}>
+                {hasLantern ? "🏮 Lantern" : "○ No lantern"}
+              </span>
+              <span className="text-[#e8c870]">✦ Fragments {fragments}/3</span>
+            </div>
           </div>
           <div className="absolute top-4 right-4 z-10 text-right text-xs uppercase tracking-widest text-[#8a7a5a]">
             <div className="pointer-events-none">WASD · Mouse · E</div>
@@ -1624,9 +1841,20 @@ export default function AnthemGame() {
             <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full bg-[#e8dcc0]/70 pointer-events-none" />
           )}
 
-          {nearby && !activeBeat && locked && (
+          {nearby && !activeBeat && !npcLine && locked && (
             <div className="absolute left-1/2 bottom-24 -translate-x-1/2 z-10 px-4 py-2 border border-[#c8a84a]/40 bg-black/40 text-sm tracking-wide pointer-events-none">
               [E] {nearby}
+            </div>
+          )}
+
+          {npcLine && !activeBeat && (
+            <div
+              className="absolute left-1/2 bottom-12 -translate-x-1/2 z-20 max-w-xl w-[90%] px-5 py-4 border border-[#c8a84a]/50 bg-[#15110b]/95 cursor-pointer"
+              onClick={() => setNpcLine(null)}
+            >
+              <div className="text-[10px] uppercase tracking-[0.3em] text-[#c8a84a] mb-1">{npcLine.name}</div>
+              <div className="font-serif text-[15px] text-[#e8dcc0] leading-relaxed">"{npcLine.line}"</div>
+              <div className="text-[9px] uppercase tracking-widest text-[#6a5a40] pt-2">[E] continue</div>
             </div>
           )}
 
