@@ -1211,14 +1211,17 @@ export default function AnthemGame() {
     // PICKUPS — lantern (required) + 3 hidden forbidden fragments
     // =====================================================================
     type Pickup = {
-      kind: "lantern" | "fragment";
+      kind: "lantern" | "fragment" | "scroll";
       sceneKey: SceneKey;
       position: THREE.Vector3;
       mesh: THREE.Object3D;
       taken: boolean;
       label: string;
+      scrollText?: string;
+      scrollTitle?: string;
     };
     const pickups: Pickup[] = [];
+
 
     // Forge stall near the grate (cobble pillars + a roof + the lantern on a peg)
     const FORGE_X = GRATE_X - 14, FORGE_Z = GRATE_Z - 4;
