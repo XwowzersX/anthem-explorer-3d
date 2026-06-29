@@ -126,6 +126,8 @@ export default function AnthemGame() {
   const masterGainRef = useRef<GainNode | null>(null);
   const hasLanternRef = useRef(false);
   const fragmentsRef = useRef(0);
+  const npcLineRef = useRef<{ name: string; line: string } | null>(null);
+  useEffect(() => { npcLineRef.current = npcLine; }, [npcLine]);
   useEffect(() => {
     mutedRef.current = muted;
     const g = masterGainRef.current;
