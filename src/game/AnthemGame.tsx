@@ -1136,6 +1136,144 @@ export default function AnthemGame() {
     addBox("house", 0, 0, H_D / 2 - 0.3, 4, 5, 0.4, M.doorWood, false);
 
     // =====================================================================
+    // NPCs — silent brothers of the city with dialogue
+    // =====================================================================
+    type NPC = {
+      sceneKey: SceneKey;
+      position: THREE.Vector3;
+      name: string;
+      lines: string[];
+      idx: number;
+      mesh: THREE.Group;
+    };
+    const npcs: NPC[] = [];
+    const makeNPC = (
+      key: SceneKey, x: number, z: number,
+      robe: number, hair: number, name: string, lines: string[],
+    ) => {
+      const g = new THREE.Group();
+      const bd = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.42, 0.5, 1.7, 10),
+        new THREE.MeshStandardMaterial({ color: robe, roughness: 0.95 }),
+      );
+      bd.position.y = 0.85; g.add(bd);
+      const hd = new THREE.Mesh(
+        new THREE.SphereGeometry(0.3, 12, 10),
+        new THREE.MeshStandardMaterial({ color: 0xe8c8a8, roughness: 0.8 }),
+      );
+      hd.position.y = 1.95; g.add(hd);
+      const hr = new THREE.Mesh(
+        new THREE.SphereGeometry(0.32, 10, 8),
+        new THREE.MeshStandardMaterial({ color: hair, roughness: 0.9 }),
+      );
+      hr.position.y = 2.05; hr.scale.y = 0.65; g.add(hr);
+      g.position.set(x, 0, z);
+      sceneAdd(key, g);
+      // soft collider so you can't walk through them
+      colliderSets[key].push({
+        box: new THREE.Box3(
+          new THREE.Vector3(x - 0.6, 0, z - 0.6),
+          new THREE.Vector3(x + 0.6, 2.2, z + 0.6),
+        ),
+      });
+      const npc: NPC = { sceneKey: key, position: new THREE.Vector3(x, 1, z), name, lines, idx: 0, mesh: g };
+      npcs.push(npc);
+      return npc;
+    };
+
+    // International 4-8818 — your only friend, in the dormitory
+    makeNPC("dorm", 6, 0, 0x4a4030, 0x2a1a08, "International 4-8818", [
+      "We are International 4-8818. We laugh when no others laugh. They beat us for it.",
+      "You hide things, Equality 7-2521. We see. We will say nothing.",
+      "If you find what lies beneath the iron grating, we will follow you into the dark.",
+    ]);
+    // The Teacher — central plaza, recites the creed
+    makeNPC("surface", -6, 6, 0x2a3a4a, 0x1a1a1a, "Teacher 0521", [
+      "We are nothing. Mankind is all. We exist through, by, and for our brothers.",
+      "There is no transgression blacker than to do or think alone.",
+      "Why do your eyes wander to the iron grating, street sweeper? Look at the ground.",
+    ]);
+    // A frightened scholar outside the Council
+    makeNPC("surface", -8, -140, 0x6a4a2a, 0x3a2a1a, "Collective 0-0009", [
+      "The Council convenes within. Do not approach unless summoned.",
+      "Strange — the lamps in the city have flickered since the last storm.",
+      "If you bring them a thing not given by the Council… run, brother. Just run.",
+    ]);
+    // A wanderer at the edge of the field
+    makeNPC("surface", 18, 220, 0x3a4a3a, 0x4a3a1a, "Solidarity 9-6347", [
+      "The Golden One tends the fields. We are forbidden to look at her.",
+      "Some nights she sings without words. The Council does not know.",
+    ]);
+
+    // =====================================================================
+    // PICKUPS — lantern (required) + 3 hidden forbidden fragments
+    // =====================================================================
+    type Pickup = {
+      kind: "lantern" | "fragment";
+      sceneKey: SceneKey;
+      position: THREE.Vector3;
+      mesh: THREE.Object3D;
+      taken: boolean;
+      label: string;
+    };
+    const pickups: Pickup[] = [];
+
+    // Forge stall near the grate (cobble pillars + a roof + the lantern on a peg)
+    const FORGE_X = GRATE_X - 14, FORGE_Z = GRATE_Z - 4;
+    addBox("surface", FORGE_X - 2, 0, FORGE_Z, 0.4, 3.2, 0.4, M.bedFrame);
+    addBox("surface", FORGE_X + 2, 0, FORGE_Z, 0.4, 3.2, 0.4, M.bedFrame);
+    addBox("surface", FORGE_X, 3.2, FORGE_Z, 5, 0.3, 3, M.roof, false);
+    addBox("surface", FORGE_X, 0, FORGE_Z - 1.2, 4, 1.1, 1.8, M.stone3, false); // anvil bench
+    const lanternHook = new THREE.Group();
+    const lanternBody = new THREE.Mesh(
+      new THREE.BoxGeometry(0.45, 0.7, 0.45),
+      new THREE.MeshStandardMaterial({ color: 0x4a3a20, emissive: 0xffb060, emissiveIntensity: 1.4, metalness: 0.4, roughness: 0.5 }),
+    );
+    lanternHook.add(lanternBody);
+    lanternHook.position.set(FORGE_X, 2.0, FORGE_Z - 0.3);
+    sceneAdd("surface", lanternHook);
+    const lanternHookLight = new THREE.PointLight(0xffb060, 1.8, 14);
+    lanternHookLight.position.set(FORGE_X, 2.4, FORGE_Z - 0.3);
+    sceneAdd("surface", lanternHookLight);
+    pickups.push({
+      kind: "lantern", sceneKey: "surface",
+      position: new THREE.Vector3(FORGE_X, 1, FORGE_Z - 0.3),
+      mesh: lanternHook, taken: false,
+      label: "Take the iron lantern",
+    });
+
+    // 3 forbidden fragments hidden across the world
+    const fragMat = new THREE.MeshStandardMaterial({
+      color: 0xe8d4a0, emissive: 0xff6020, emissiveIntensity: 1.6, metalness: 0.3, roughness: 0.3,
+    });
+    const placeFragment = (key: SceneKey, x: number, y: number, z: number, hint: string) => {
+      const f = new THREE.Mesh(new THREE.TetrahedronGeometry(0.35), fragMat);
+      f.position.set(x, y, z);
+      sceneAdd(key, f);
+      pickups.push({
+        kind: "fragment", sceneKey: key,
+        position: new THREE.Vector3(x, y, z),
+        mesh: f, taken: false,
+        label: hint,
+      });
+    };
+    // 1) Behind a building in the city
+    placeFragment("surface", 64, 1.2, 36, "Pick up the shard — a relic of the Unmentionable Times");
+    // 2) Deep in the forest
+    placeFragment("surface", -340, 1.2, 90, "Pick up the shard — a relic of the Unmentionable Times");
+    // 3) Tucked in a dead-end underground corridor
+    placeFragment("underground", 100, 1.2, 0, "Pick up the shard — a relic of the Unmentionable Times");
+
+    // =====================================================================
+    // PLAYER-CARRIED LANTERN — point light parented to camera
+    // =====================================================================
+    const carriedLantern = new THREE.PointLight(0xffb070, 0.0, 22);
+    carriedLantern.position.set(0.4, -0.2, -0.3);
+    camera.add(carriedLantern);
+    scene.add(camera); // camera must be in scene graph for its children to render
+
+
+    // =====================================================================
     // DOORS — surface entry points into each interior
     // =====================================================================
     const doors: Door[] = [
