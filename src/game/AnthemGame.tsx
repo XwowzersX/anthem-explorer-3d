@@ -1691,7 +1691,7 @@ export default function AnthemGame() {
         const dg = localPos.distanceTo(new THREE.Vector3(GRATE_X, 1, GRATE_Z));
         if (dg < 5) {
           if (!grateOpen && progressRef.current === 1) near = "Lift the iron grating";
-          else if (grateOpen) near = "Descend into the tunnel";
+          else if (grateOpen) near = hasLanternRef.current ? "Descend into the tunnel" : "Pitch black below — find a lantern first";
         }
         if (!near) {
           for (const d of doors) {
@@ -1703,6 +1703,20 @@ export default function AnthemGame() {
           }
         }
       }
+      // pickups
+      if (!near) {
+        for (const pk of pickups) {
+          if (pk.taken || pk.sceneKey !== currentScene) continue;
+          if (localPos.distanceTo(pk.position) < 2.2) { near = pk.label; break; }
+        }
+      }
+      // NPCs
+      if (!near) {
+        for (const n of npcs) {
+          if (n.sceneKey !== currentScene) continue;
+          if (localPos.distanceTo(n.position) < 2.8) { near = `Speak with ${n.name}`; break; }
+        }
+      }
       if (!near) {
         let nd = 5.5;
         for (const it of interactables) {
@@ -1711,6 +1725,21 @@ export default function AnthemGame() {
           const d = localPos.distanceTo(it.position);
           if (d < nd) { nd = d; near = it.label; }
         }
+      }
+      // lantern flicker while carrying
+      if (hasLanternRef.current) {
+        carriedLantern.intensity = 1.9 + Math.sin(now * 0.012) * 0.25 + (Math.random() - 0.5) * 0.15;
+      }
+      // pickup bob
+      for (const pk of pickups) {
+        if (!pk.taken) pk.mesh.rotation.y += dt * 1.2;
+      }
+      // npc face-player
+      for (const n of npcs) {
+        if (n.sceneKey !== currentScene) continue;
+        const dx = camera.position.x - SCENE_OFFSETS[currentScene] - n.mesh.position.x;
+        const dz = camera.position.z - n.mesh.position.z;
+        n.mesh.rotation.y = Math.atan2(dx, dz);
       }
       setNearby(near);
 
