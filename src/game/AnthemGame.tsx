@@ -555,11 +555,44 @@ export default function AnthemGame() {
     // =====================================================================
     // SURFACE — LIGHTING
     // =====================================================================
-    scene.add(new THREE.HemisphereLight(0xcfd3dc, 0x2a2a30, 1.0));
-    scene.add(new THREE.AmbientLight(0x6a6a70, 0.45));
-    const sun = new THREE.DirectionalLight(0xffe8c8, 0.95);
+    scene.add(new THREE.HemisphereLight(0xb8c4dc, 0x3a3024, 1.25));
+    scene.add(new THREE.AmbientLight(0x806a60, 0.4));
+    const sun = new THREE.DirectionalLight(0xffc890, 1.35);
     sun.position.set(140, 220, 80);
     scene.add(sun);
+    // Sun disc (visible orb low on the horizon)
+    const sunDisc = new THREE.Mesh(
+      new THREE.SphereGeometry(22, 24, 16),
+      new THREE.MeshBasicMaterial({ color: 0xffd090, fog: false }),
+    );
+    sunDisc.position.set(420, 90, 240);
+    sceneAdd("surface", sunDisc);
+    // Sun halo
+    const halo = new THREE.Mesh(
+      new THREE.SphereGeometry(40, 24, 16),
+      new THREE.MeshBasicMaterial({ color: 0xff8040, transparent: true, opacity: 0.18, fog: false }),
+    );
+    halo.position.copy(sunDisc.position);
+    sceneAdd("surface", halo);
+
+    // Dust motes drifting through the air (Points)
+    {
+      const N = 800;
+      const pos = new Float32Array(N * 3);
+      for (let i = 0; i < N; i++) {
+        pos[i * 3 + 0] = (Math.random() - 0.5) * 280;
+        pos[i * 3 + 1] = Math.random() * 40 + 1;
+        pos[i * 3 + 2] = (Math.random() - 0.5) * 280;
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+      const mat = new THREE.PointsMaterial({
+        color: 0xffd8a0, size: 0.18, transparent: true, opacity: 0.55,
+        sizeAttenuation: true, depthWrite: false,
+      });
+      const motes = new THREE.Points(geo, mat);
+      sceneAdd("surface", motes);
+    }
 
     // =====================================================================
     // SURFACE — GROUND
