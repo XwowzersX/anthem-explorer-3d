@@ -1451,7 +1451,7 @@ export default function AnthemGame() {
         activeBeatRef.current = null;
         return;
       }
-      if (npcLine) { setNpcLine(null); return; }
+      if (npcLineRef.current) { npcLineRef.current = null; setNpcLine(null); return; }
       const p = camera.position;
       const localP = new THREE.Vector3(p.x - SCENE_OFFSETS[currentScene], p.y, p.z);
 
