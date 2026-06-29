@@ -1449,8 +1449,41 @@ export default function AnthemGame() {
         activeBeatRef.current = null;
         return;
       }
+      if (npcLine) { setNpcLine(null); return; }
       const p = camera.position;
       const localP = new THREE.Vector3(p.x - SCENE_OFFSETS[currentScene], p.y, p.z);
+
+      // PICKUPS first — they're small and easy to miss
+      for (const pk of pickups) {
+        if (pk.taken || pk.sceneKey !== currentScene) continue;
+        if (localP.distanceTo(pk.position) < 2.2) {
+          pk.taken = true;
+          pk.mesh.visible = false;
+          sfx.interact();
+          if (pk.kind === "lantern") {
+            hasLanternRef.current = true;
+            setHasLantern(true);
+            carriedLantern.intensity = 2.2;
+          } else {
+            fragmentsRef.current += 1;
+            setFragments(fragmentsRef.current);
+            sfx.bell();
+          }
+          return;
+        }
+      }
+
+      // NPCs — cycle through their lines
+      for (const n of npcs) {
+        if (n.sceneKey !== currentScene) continue;
+        if (localP.distanceTo(n.position) < 2.8) {
+          const line = n.lines[n.idx % n.lines.length];
+          n.idx += 1;
+          setNpcLine({ name: n.name, line });
+          sfx.interact();
+          return;
+        }
+      }
 
       // INTERIOR — exit pads
       if (currentScene === "dorm" && localP.distanceTo(dormExit.position) < 2.5) {
@@ -1485,6 +1518,10 @@ export default function AnthemGame() {
           }
 
           if (grateOpen) {
+            if (!hasLanternRef.current) {
+              setNpcLine({ name: "—", line: "The shaft is pitch black. You need a lantern. There is a forge stall nearby." });
+              return;
+            }
             switchScene("underground", new THREE.Vector3(0, 1.7, 4), Math.PI);
             return;
           }
