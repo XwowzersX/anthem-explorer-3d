@@ -1519,6 +1519,11 @@ export default function AnthemGame() {
       for (const pk of pickups) {
         if (pk.taken || pk.sceneKey !== currentScene) continue;
         if (localP.distanceTo(pk.position) < 2.2) {
+          if (pk.kind === "scroll") {
+            sfx.interact();
+            setNpcLine({ name: pk.scrollTitle ?? "Scroll", line: pk.scrollText ?? "" });
+            return;
+          }
           pk.taken = true;
           pk.mesh.visible = false;
           sfx.interact();
@@ -1534,6 +1539,7 @@ export default function AnthemGame() {
           return;
         }
       }
+
 
       // NPCs — cycle through their lines
       for (const n of npcs) {
