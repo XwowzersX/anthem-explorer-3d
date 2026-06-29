@@ -1839,9 +1839,20 @@ export default function AnthemGame() {
             <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full bg-[#e8dcc0]/70 pointer-events-none" />
           )}
 
-          {nearby && !activeBeat && locked && (
+          {nearby && !activeBeat && !npcLine && locked && (
             <div className="absolute left-1/2 bottom-24 -translate-x-1/2 z-10 px-4 py-2 border border-[#c8a84a]/40 bg-black/40 text-sm tracking-wide pointer-events-none">
               [E] {nearby}
+            </div>
+          )}
+
+          {npcLine && !activeBeat && (
+            <div
+              className="absolute left-1/2 bottom-12 -translate-x-1/2 z-20 max-w-xl w-[90%] px-5 py-4 border border-[#c8a84a]/50 bg-[#15110b]/95 cursor-pointer"
+              onClick={() => setNpcLine(null)}
+            >
+              <div className="text-[10px] uppercase tracking-[0.3em] text-[#c8a84a] mb-1">{npcLine.name}</div>
+              <div className="font-serif text-[15px] text-[#e8dcc0] leading-relaxed">"{npcLine.line}"</div>
+              <div className="text-[9px] uppercase tracking-widest text-[#6a5a40] pt-2">[E] continue</div>
             </div>
           )}
 
