@@ -1270,6 +1270,63 @@ export default function AnthemGame() {
     placeFragment("underground", 100, 1.2, 0, "Pick up the shard — a relic of the Unmentionable Times");
 
     // =====================================================================
+    // READABLE SCROLLS — quotes from the novella, scattered across the world
+    // =====================================================================
+    const scrollMat = new THREE.MeshStandardMaterial({
+      color: 0xe8d4a0, emissive: 0x402008, emissiveIntensity: 0.4, roughness: 0.85,
+    });
+    const placeScroll = (key: SceneKey, x: number, y: number, z: number, title: string, text: string) => {
+      const g = new THREE.Group();
+      const scroll = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.6, 8), scrollMat);
+      scroll.rotation.z = Math.PI / 2;
+      g.add(scroll);
+      // soft glow
+      const glow = new THREE.Mesh(
+        new THREE.SphereGeometry(0.45, 8, 8),
+        new THREE.MeshBasicMaterial({ color: 0xffb060, transparent: true, opacity: 0.18 }),
+      );
+      g.add(glow);
+      g.position.set(x, y, z);
+      sceneAdd(key, g);
+      pickups.push({
+        kind: "scroll", sceneKey: key,
+        position: new THREE.Vector3(x, y, z),
+        mesh: g, taken: false,
+        label: `Read: ${title}`,
+        scrollTitle: title,
+        scrollText: text,
+      });
+    };
+    placeScroll("dorm", -6, 1.2, 4, "A scrap from the Home of the Students",
+      "It is a sin to write this. It is a sin to think words no others think. We know all this, and yet we cannot stop.");
+    placeScroll("surface", 26, 1.2, -8, "Charcoal on a cobblestone wall",
+      "The word which our ear must never hear, the word our tongue must never speak — the Unspeakable Word — has been lost.");
+    placeScroll("council", 0, 1.2, 6, "A page torn from a Council ledger",
+      "What is not done collectively cannot be good. There is no transgression blacker than to do or think alone.");
+    placeScroll("house", 6, 1.2, -4, "A child's primer from the Unmentionable Times",
+      "I owe nothing to my brothers, nor do I gather debts from them. I ask none to live for me, nor do I live for any others. I am. I think. I will.");
+    placeScroll("underground", -60, 1.2, 0, "A blackened sheet of iron",
+      "Beneath the iron grating lay the tunnels of a forgotten age. We have descended where no man has dared in a hundred years.");
+
+    // =====================================================================
+    // EXTRA NPCs — the deformed brother, the weeper, the saint of the pyre
+    // =====================================================================
+    makeNPC("dorm", -4, -4, 0x3a3a3a, 0x1a1a1a, "Union 5-3992", [
+      "Our brain is empty, they say. Our teeth fall out. We do not mind.",
+      "You burn the candle when no one sees. We will not tell.",
+    ]);
+    makeNPC("surface", 40, -40, 0x5a3a3a, 0x2a1a1a, "Fraternity 2-5503", [
+      "We weep at night without reason. We do not know why.",
+      "It is forbidden, not to be happy. We are guilty.",
+    ]);
+    makeNPC("surface", -2, -180, 0x6a2a2a, 0x1a1a1a, "Saint of the Pyre", [
+      "They burned our tongue out, brother. We spoke the Unspeakable Word.",
+      "Look not at us with pity — look, and remember the word.",
+      "EGO. Say it once, when you are far from here.",
+    ]);
+
+
+    // =====================================================================
     // PLAYER-CARRIED LANTERN — point light parented to camera
     // =====================================================================
     const carriedLantern = new THREE.PointLight(0xffb070, 0.0, 22);
