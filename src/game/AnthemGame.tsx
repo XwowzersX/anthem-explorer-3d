@@ -140,17 +140,34 @@ export default function AnthemGame() {
     // SCENE / RENDERER
     // =====================================================================
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x8a9bb0);
-    scene.fog = new THREE.Fog(0x8a9bb0, 120, 480);
+
+    // Gradient sky dome (vertical CanvasTexture)
+    const makeSky = () => {
+      const c = document.createElement("canvas"); c.width = 16; c.height = 256;
+      const g = c.getContext("2d")!;
+      const grd = g.createLinearGradient(0, 0, 0, 256);
+      grd.addColorStop(0.00, "#0b1726");
+      grd.addColorStop(0.35, "#2a3850");
+      grd.addColorStop(0.65, "#7a6a78");
+      grd.addColorStop(1.00, "#d8a070");
+      g.fillStyle = grd; g.fillRect(0, 0, 16, 256);
+      const t = new THREE.CanvasTexture(c);
+      t.colorSpace = THREE.SRGBColorSpace;
+      t.magFilter = THREE.LinearFilter; t.minFilter = THREE.LinearFilter;
+      return t;
+    };
+    scene.background = makeSky();
+    scene.fog = new THREE.Fog(0x4a4858, 90, 520);
 
     const camera = new THREE.PerspectiveCamera(74, mount.clientWidth / mount.clientHeight, 0.05, 900);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
     renderer.setSize(mount.clientWidth, mount.clientHeight);
     renderer.shadowMap.enabled = false; // perf: shadows were the biggest cost
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.05;
+    renderer.toneMappingExposure = 1.15;
     mount.appendChild(renderer.domElement);
 
     // =====================================================================
