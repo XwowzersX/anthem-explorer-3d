@@ -119,8 +119,13 @@ export default function AnthemGame() {
   const [finished, setFinished] = useState(false);
   const [objective, setObjective] = useState<string>("Take the parchment from beneath your cot");
   const [muted, setMuted] = useState(false);
+  const [hasLantern, setHasLantern] = useState(false);
+  const [fragments, setFragments] = useState(0);
+  const [npcLine, setNpcLine] = useState<{ name: string; line: string } | null>(null);
   const mutedRef = useRef(false);
   const masterGainRef = useRef<GainNode | null>(null);
+  const hasLanternRef = useRef(false);
+  const fragmentsRef = useRef(0);
   useEffect(() => {
     mutedRef.current = muted;
     const g = masterGainRef.current;
