@@ -342,55 +342,110 @@ export default function AnthemGame() {
     // =====================================================================
     // SHARED MATERIALS (huge perf win — one material instead of hundreds)
     // =====================================================================
+    // ---------- Procedural textures (CanvasTexture — no asset deps) ----------
+    const noiseTex = (
+      w: number, h: number,
+      base: [number, number, number],
+      vary: number,
+      lines?: { color: string; every: number; thick: number; horiz?: boolean },
+      speckle?: { color: string; count: number; size: number },
+      tile = 1,
+    ) => {
+      const c = document.createElement("canvas"); c.width = w; c.height = h;
+      const g = c.getContext("2d")!;
+      const img = g.createImageData(w, h);
+      for (let i = 0; i < w * h; i++) {
+        const n = (Math.random() - 0.5) * vary;
+        img.data[i * 4 + 0] = Math.max(0, Math.min(255, base[0] + n));
+        img.data[i * 4 + 1] = Math.max(0, Math.min(255, base[1] + n));
+        img.data[i * 4 + 2] = Math.max(0, Math.min(255, base[2] + n));
+        img.data[i * 4 + 3] = 255;
+      }
+      g.putImageData(img, 0, 0);
+      if (lines) {
+        g.strokeStyle = lines.color; g.lineWidth = lines.thick;
+        if (lines.horiz) for (let y = 0; y < h; y += lines.every) { g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke(); }
+        else for (let x = 0; x < w; x += lines.every) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, h); g.stroke(); }
+      }
+      if (speckle) {
+        g.fillStyle = speckle.color;
+        for (let i = 0; i < speckle.count; i++) {
+          g.fillRect(Math.random() * w, Math.random() * h, speckle.size, speckle.size);
+        }
+      }
+      const t = new THREE.CanvasTexture(c);
+      t.wrapS = t.wrapT = THREE.RepeatWrapping;
+      t.repeat.set(tile, tile);
+      t.colorSpace = THREE.SRGBColorSpace;
+      t.anisotropy = 8;
+      return t;
+    };
+
+    const T = {
+      stone: noiseTex(128, 128, [60, 56, 48], 38, { color: "#15110c", every: 32, thick: 1 }, { color: "#1a1612", count: 60, size: 2 }, 2),
+      cobble: noiseTex(256, 256, [70, 64, 56], 50, { color: "#1a1612", every: 24, thick: 2 }, { color: "#2a241c", count: 120, size: 2 }, 24),
+      wood: noiseTex(128, 256, [70, 48, 28], 28, { color: "#2a1808", every: 18, thick: 1, horiz: true }, undefined, 2),
+      plaster: noiseTex(128, 128, [120, 108, 84], 30, undefined, { color: "#3a3020", count: 80, size: 2 }, 2),
+      plasterDark: noiseTex(128, 128, [78, 68, 50], 28, undefined, { color: "#2a2418", count: 80, size: 2 }, 2),
+      roof: noiseTex(128, 128, [42, 38, 30], 22, { color: "#15110c", every: 16, thick: 2, horiz: true }, undefined, 3),
+      grass: noiseTex(256, 256, [120, 108, 56], 60, undefined, { color: "#c8a84a", count: 400, size: 2 }, 40),
+      iron: noiseTex(128, 128, [70, 64, 52], 40, { color: "#1a1612", every: 12, thick: 2 }, { color: "#a08050", count: 30, size: 2 }, 1),
+      tunnel: noiseTex(128, 128, [38, 32, 26], 26, undefined, { color: "#0a0806", count: 100, size: 2 }, 3),
+      bark: noiseTex(64, 256, [44, 32, 22], 24, { color: "#1a1208", every: 8, thick: 1, horiz: true }, undefined, 2),
+      leaves: noiseTex(128, 128, [40, 70, 44], 50, undefined, { color: "#1a3a20", count: 200, size: 2 }, 2),
+      gold: noiseTex(128, 128, [220, 190, 110], 30, undefined, { color: "#fff0a0", count: 80, size: 2 }, 1),
+    };
+
+    // =====================================================================
+    // SHARED MATERIALS (huge perf win — one material instead of hundreds)
+    // =====================================================================
     const M = {
-      stone: new THREE.MeshLambertMaterial({ color: 0x2a2823 }),
-      stone2: new THREE.MeshLambertMaterial({ color: 0x35322c }),
-      stone3: new THREE.MeshLambertMaterial({ color: 0x1f1d18 }),
-      stone4: new THREE.MeshLambertMaterial({ color: 0x403c34 }),
-      cobble: new THREE.MeshLambertMaterial({ color: 0x3a3631 }),
-      wood: new THREE.MeshLambertMaterial({ color: 0x3a2a18 }),
-      woodDark: new THREE.MeshLambertMaterial({ color: 0x231811 }),
-      plaster: new THREE.MeshLambertMaterial({ color: 0x6a5e48 }),
-      plasterDark: new THREE.MeshLambertMaterial({ color: 0x4a4030 }),
-      roof: new THREE.MeshLambertMaterial({ color: 0x1f1c17 }),
+      stone:  new THREE.MeshStandardMaterial({ map: T.stone, color: 0x6a6258, roughness: 0.92, metalness: 0.02 }),
+      stone2: new THREE.MeshStandardMaterial({ map: T.stone, color: 0x7a7268, roughness: 0.9,  metalness: 0.03 }),
+      stone3: new THREE.MeshStandardMaterial({ map: T.stone, color: 0x55504a, roughness: 0.95, metalness: 0.02 }),
+      stone4: new THREE.MeshStandardMaterial({ map: T.stone, color: 0x8a8278, roughness: 0.88, metalness: 0.04 }),
+      cobble: new THREE.MeshStandardMaterial({ map: T.cobble, color: 0x8a8278, roughness: 0.95 }),
+      wood:   new THREE.MeshStandardMaterial({ map: T.wood,   color: 0x8a6238, roughness: 0.85 }),
+      woodDark: new THREE.MeshStandardMaterial({ map: T.wood, color: 0x5a3a20, roughness: 0.9 }),
+      plaster: new THREE.MeshStandardMaterial({ map: T.plaster, color: 0xc8b890, roughness: 0.95 }),
+      plasterDark: new THREE.MeshStandardMaterial({ map: T.plasterDark, color: 0x9a8a6a, roughness: 0.95 }),
+      roof: new THREE.MeshStandardMaterial({ map: T.roof, color: 0x4a4238, roughness: 0.9 }),
       door: new THREE.MeshStandardMaterial({
-        color: 0x4a3a20, emissive: 0xff8030, emissiveIntensity: 0.45,
-        metalness: 0.35, roughness: 0.65,
+        map: T.wood, color: 0x4a3a20, emissive: 0xff8030, emissiveIntensity: 0.55,
+        metalness: 0.35, roughness: 0.55,
       }),
       doorWood: new THREE.MeshStandardMaterial({
-        color: 0x3a2614, emissive: 0xffa050, emissiveIntensity: 0.35, roughness: 0.85,
+        map: T.wood, color: 0x4a3014, emissive: 0xffa050, emissiveIntensity: 0.45, roughness: 0.8,
       }),
       window: new THREE.MeshBasicMaterial({ color: 0xffd98a }),
       fire: new THREE.MeshBasicMaterial({ color: 0xff7733 }),
       candle: new THREE.MeshBasicMaterial({ color: 0xfff0aa }),
       ironGrate: new THREE.MeshStandardMaterial({
-        color: 0x3a3228, metalness: 0.7, roughness: 0.4,
-        emissive: 0x2a1a08, emissiveIntensity: 0.6,
+        map: T.iron, color: 0x6a5e4a, metalness: 0.85, roughness: 0.35,
+        emissive: 0x2a1a08, emissiveIntensity: 0.5,
       }),
-      tunnelWall: new THREE.MeshLambertMaterial({ color: 0x1a1612 }),
-      tunnelFloor: new THREE.MeshLambertMaterial({ color: 0x14110c }),
-      tunnelCeil: new THREE.MeshLambertMaterial({ color: 0x0a0806 }),
+      tunnelWall:  new THREE.MeshStandardMaterial({ map: T.tunnel, color: 0x4a4238, roughness: 0.95 }),
+      tunnelFloor: new THREE.MeshStandardMaterial({ map: T.tunnel, color: 0x2a2418, roughness: 0.95 }),
+      tunnelCeil:  new THREE.MeshStandardMaterial({ map: T.tunnel, color: 0x1a1612, roughness: 0.95 }),
       lantern: new THREE.MeshBasicMaterial({ color: 0xffc060 }),
-      cloth: new THREE.MeshLambertMaterial({ color: 0xc8b890 }),
-      bedFrame: new THREE.MeshLambertMaterial({ color: 0x2a1e12 }),
-      rail: new THREE.MeshStandardMaterial({
-        color: 0x6a5a48, metalness: 0.85, roughness: 0.35,
-      }),
-      grass: new THREE.MeshLambertMaterial({ color: 0x8a7a3a }),
-      tuft: new THREE.MeshLambertMaterial({ color: 0xc8a84a }),
-      trunk: new THREE.MeshLambertMaterial({ color: 0x231a12 }),
-      leaves: new THREE.MeshLambertMaterial({ color: 0x1e3a22 }),
-      glassR: new THREE.MeshStandardMaterial({ color: 0x7a3a3a, emissive: 0x6a2828, emissiveIntensity: 0.4, transparent: true, opacity: 0.85 }),
-      glassB: new THREE.MeshStandardMaterial({ color: 0x3a5a7a, emissive: 0x284060, emissiveIntensity: 0.4, transparent: true, opacity: 0.85 }),
-      glassG: new THREE.MeshStandardMaterial({ color: 0x4a6a3a, emissive: 0x305028, emissiveIntensity: 0.4, transparent: true, opacity: 0.85 }),
-      glassY: new THREE.MeshStandardMaterial({ color: 0xb89a3a, emissive: 0x806020, emissiveIntensity: 0.5, transparent: true, opacity: 0.85 }),
-      mirror: new THREE.MeshStandardMaterial({ color: 0xddddee, emissive: 0x88aacc, emissiveIntensity: 0.3, metalness: 0.6, roughness: 0.2 }),
-      gold: new THREE.MeshStandardMaterial({ color: 0xeeddaa, emissive: 0xffe8a0, emissiveIntensity: 1.0 }),
-      altar: new THREE.MeshStandardMaterial({ color: 0x6a5a3a, emissive: 0x221810, emissiveIntensity: 0.5 }),
-      altarStone: new THREE.MeshLambertMaterial({ color: 0x55504a }),
-      pillar: new THREE.MeshLambertMaterial({ color: 0x5a5040 }),
-      pillarDark: new THREE.MeshLambertMaterial({ color: 0x4a4438 }),
-      exitPad: new THREE.MeshStandardMaterial({ color: 0x6a5a3a, emissive: 0xffc060, emissiveIntensity: 1.1 }),
+      cloth: new THREE.MeshStandardMaterial({ color: 0xc8b890, roughness: 0.95 }),
+      bedFrame: new THREE.MeshStandardMaterial({ map: T.wood, color: 0x4a2e18, roughness: 0.85 }),
+      rail: new THREE.MeshStandardMaterial({ color: 0x9a8a78, metalness: 0.9, roughness: 0.25 }),
+      grass: new THREE.MeshStandardMaterial({ map: T.grass, color: 0xa89a5a, roughness: 0.95 }),
+      tuft: new THREE.MeshStandardMaterial({ color: 0xd8b85a, emissive: 0x4a3818, emissiveIntensity: 0.3, roughness: 0.9 }),
+      trunk: new THREE.MeshStandardMaterial({ map: T.bark, color: 0x5a3e22, roughness: 0.95 }),
+      leaves: new THREE.MeshStandardMaterial({ map: T.leaves, color: 0x4a7a48, roughness: 0.9 }),
+      glassR: new THREE.MeshStandardMaterial({ color: 0xaa4040, emissive: 0xff3030, emissiveIntensity: 0.6, transparent: true, opacity: 0.7, metalness: 0.1, roughness: 0.15 }),
+      glassB: new THREE.MeshStandardMaterial({ color: 0x4070aa, emissive: 0x3060ff, emissiveIntensity: 0.6, transparent: true, opacity: 0.7, metalness: 0.1, roughness: 0.15 }),
+      glassG: new THREE.MeshStandardMaterial({ color: 0x4aaa5a, emissive: 0x30ff60, emissiveIntensity: 0.55, transparent: true, opacity: 0.7, metalness: 0.1, roughness: 0.15 }),
+      glassY: new THREE.MeshStandardMaterial({ color: 0xddbb3a, emissive: 0xffd040, emissiveIntensity: 0.7, transparent: true, opacity: 0.7, metalness: 0.1, roughness: 0.15 }),
+      mirror: new THREE.MeshStandardMaterial({ color: 0xeef0ff, emissive: 0x88aacc, emissiveIntensity: 0.35, metalness: 0.9, roughness: 0.08 }),
+      gold: new THREE.MeshStandardMaterial({ map: T.gold, color: 0xffe8a0, emissive: 0xffd060, emissiveIntensity: 1.2, metalness: 0.6, roughness: 0.25 }),
+      altar: new THREE.MeshStandardMaterial({ map: T.wood, color: 0x8a6a3a, emissive: 0x402810, emissiveIntensity: 0.5 }),
+      altarStone: new THREE.MeshStandardMaterial({ map: T.stone, color: 0x8a8278, roughness: 0.9 }),
+      pillar: new THREE.MeshStandardMaterial({ map: T.stone, color: 0x7a7060, roughness: 0.88 }),
+      pillarDark: new THREE.MeshStandardMaterial({ map: T.stone, color: 0x5a5040, roughness: 0.9 }),
+      exitPad: new THREE.MeshStandardMaterial({ color: 0x6a5a3a, emissive: 0xffc060, emissiveIntensity: 1.3 }),
     };
 
     // Shared geometries
