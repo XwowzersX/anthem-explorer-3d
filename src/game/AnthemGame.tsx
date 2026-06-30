@@ -1220,11 +1220,13 @@ export default function AnthemGame() {
       lines: string[];
       idx: number;
       mesh: THREE.Group;
+      wander?: { cx: number; cz: number; r: number; phase: number; speed: number };
     };
     const npcs: NPC[] = [];
     const makeNPC = (
       key: SceneKey, x: number, z: number,
       robe: number, hair: number, name: string, lines: string[],
+      wander?: { r: number; speed: number },
     ) => {
       const g = new THREE.Group();
       const bd = new THREE.Mesh(
@@ -1244,14 +1246,19 @@ export default function AnthemGame() {
       hr.position.y = 2.05; hr.scale.y = 0.65; g.add(hr);
       g.position.set(x, 0, z);
       sceneAdd(key, g);
-      // soft collider so you can't walk through them
-      colliderSets[key].push({
-        box: new THREE.Box3(
-          new THREE.Vector3(x - 0.6, 0, z - 0.6),
-          new THREE.Vector3(x + 0.6, 2.2, z + 0.6),
-        ),
-      });
-      const npc: NPC = { sceneKey: key, position: new THREE.Vector3(x, 1, z), name, lines, idx: 0, mesh: g };
+      // Stationary NPCs get a soft collider; wanderers don't (would need per-frame updates)
+      if (!wander) {
+        colliderSets[key].push({
+          box: new THREE.Box3(
+            new THREE.Vector3(x - 0.6, 0, z - 0.6),
+            new THREE.Vector3(x + 0.6, 2.2, z + 0.6),
+          ),
+        });
+      }
+      const npc: NPC = {
+        sceneKey: key, position: new THREE.Vector3(x, 1, z), name, lines, idx: 0, mesh: g,
+        wander: wander ? { cx: x, cz: z, r: wander.r, phase: Math.random() * Math.PI * 2, speed: wander.speed } : undefined,
+      };
       npcs.push(npc);
       return npc;
     };
