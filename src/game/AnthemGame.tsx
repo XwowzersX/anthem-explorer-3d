@@ -1296,28 +1296,53 @@ export default function AnthemGame() {
     const pickups: Pickup[] = [];
 
 
-    // Forge stall near the grate (cobble pillars + a roof + the lantern on a peg)
+    // Forge stall near the grate — EMPTY (the lantern is hidden elsewhere now)
     const FORGE_X = GRATE_X - 14, FORGE_Z = GRATE_Z - 4;
     addBox("surface", FORGE_X - 2, 0, FORGE_Z, 0.4, 3.2, 0.4, M.bedFrame);
     addBox("surface", FORGE_X + 2, 0, FORGE_Z, 0.4, 3.2, 0.4, M.bedFrame);
     addBox("surface", FORGE_X, 3.2, FORGE_Z, 5, 0.3, 3, M.roof, false);
     addBox("surface", FORGE_X, 0, FORGE_Z - 1.2, 4, 1.1, 1.8, M.stone3, false); // anvil bench
+    // empty peg where the lantern once hung
+    addBox("surface", FORGE_X, 2.0, FORGE_Z - 0.3, 0.1, 0.4, 0.1, M.bedFrame, false);
+    // forge embers (no lantern, but the coals still burn — fire feel)
+    const embers = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.2, 0.8), M.flame);
+    embers.position.set(FORGE_X, 1.25, FORGE_Z - 1.2);
+    sceneAdd("surface", embers);
+    const emberLight = new THREE.PointLight(0xff5520, 1.2, 10);
+    emberLight.position.set(FORGE_X, 1.6, FORGE_Z - 1.2);
+    sceneAdd("surface", emberLight);
+    flickerLamps.push({ light: emberLight, base: 1.2, cone: embers });
+    // a note pinned on the forge bench tells you where the lantern went
+    const forgeNote = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.04, 0.3),
+      new THREE.MeshStandardMaterial({ color: 0xeed9a4, emissive: 0xffe080, emissiveIntensity: 1.0 }));
+    forgeNote.position.set(FORGE_X, 1.72, FORGE_Z - 1.2);
+    sceneAdd("surface", forgeNote);
+    pickups.push({
+      kind: "scroll", sceneKey: "surface",
+      position: new THREE.Vector3(FORGE_X, 1.7, FORGE_Z - 1.2),
+      mesh: forgeNote, taken: false,
+      label: "Read the forge note",
+      scrollTitle: "Pinned to the empty forge",
+      scrollText: "The iron lantern is missing. Brother International borrowed it last night and hid it beneath his cot in the Home of the Street Sweepers. The Council must not see.",
+    });
+
+    // The actual lantern — hidden under a cot in the dormitory (must explore)
     const lanternHook = new THREE.Group();
     const lanternBody = new THREE.Mesh(
-      new THREE.BoxGeometry(0.45, 0.7, 0.45),
-      new THREE.MeshStandardMaterial({ color: 0x4a3a20, emissive: 0xffb060, emissiveIntensity: 1.4, metalness: 0.4, roughness: 0.5 }),
+      new THREE.BoxGeometry(0.4, 0.55, 0.4),
+      new THREE.MeshStandardMaterial({ color: 0x3a2a18, emissive: 0xffb060, emissiveIntensity: 1.6, metalness: 0.5, roughness: 0.5 }),
     );
     lanternHook.add(lanternBody);
-    lanternHook.position.set(FORGE_X, 2.0, FORGE_Z - 0.3);
-    sceneAdd("surface", lanternHook);
-    const lanternHookLight = new THREE.PointLight(0xffb060, 1.8, 14);
-    lanternHookLight.position.set(FORGE_X, 2.4, FORGE_Z - 0.3);
-    sceneAdd("surface", lanternHookLight);
+    lanternHook.position.set(-10, 0.35, 5); // under the far cot in the dorm
+    sceneAdd("dorm", lanternHook);
+    const lanternHiddenLight = new THREE.PointLight(0xffb060, 0.9, 6);
+    lanternHiddenLight.position.set(-10, 0.5, 5);
+    sceneAdd("dorm", lanternHiddenLight);
     pickups.push({
-      kind: "lantern", sceneKey: "surface",
-      position: new THREE.Vector3(FORGE_X, 1, FORGE_Z - 0.3),
+      kind: "lantern", sceneKey: "dorm",
+      position: new THREE.Vector3(-10, 0.5, 5),
       mesh: lanternHook, taken: false,
-      label: "Take the iron lantern",
+      label: "Take the hidden lantern",
     });
 
     // 3 forbidden fragments hidden across the world
