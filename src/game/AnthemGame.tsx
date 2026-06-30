@@ -435,6 +435,11 @@ export default function AnthemGame() {
       tunnelFloor: new THREE.MeshStandardMaterial({ map: T.tunnel, color: 0x2a2418, roughness: 0.95 }),
       tunnelCeil:  new THREE.MeshStandardMaterial({ map: T.tunnel, color: 0x1a1612, roughness: 0.95 }),
       lantern: new THREE.MeshBasicMaterial({ color: 0xffc060 }),
+      flame:   new THREE.MeshBasicMaterial({ color: 0xff7028 }),
+      flameCore: new THREE.MeshBasicMaterial({ color: 0xffe080 }),
+      road:    new THREE.MeshStandardMaterial({ map: T.cobble, color: 0x4a4238, roughness: 0.98 }),
+      curb:    new THREE.MeshStandardMaterial({ map: T.stone, color: 0x9a8e78, roughness: 0.9 }),
+      timber:  new THREE.MeshStandardMaterial({ map: T.wood, color: 0x3a2410, roughness: 0.9 }),
       cloth: new THREE.MeshStandardMaterial({ color: 0xc8b890, roughness: 0.95 }),
       bedFrame: new THREE.MeshStandardMaterial({ map: T.wood, color: 0x4a2e18, roughness: 0.85 }),
       rail: new THREE.MeshStandardMaterial({ color: 0x9a8a78, metalness: 0.9, roughness: 0.25 }),
@@ -609,9 +614,32 @@ export default function AnthemGame() {
     sceneAdd("surface", ground);
 
     // =====================================================================
-    // SURFACE — THE CITY (denser-feeling but cheaper)
+    // SURFACE — STREETS (lighter paved roads on top of cobble ground)
     // =====================================================================
-    const stoneMats = [M.stone, M.stone2, M.stone3, M.stone4];
+    const roadGeoNS = new THREE.PlaneGeometry(6, 240);
+    const roadGeoEW = new THREE.PlaneGeometry(240, 6);
+    for (let k = -7; k <= 7; k++) {
+      // E/W avenue at z = k*17
+      const ew = new THREE.Mesh(roadGeoEW, M.road);
+      ew.rotation.x = -Math.PI / 2;
+      ew.position.set(0, 0.03, k * 17);
+      sceneAdd("surface", ew);
+      // N/S avenue at x = k*17
+      const ns = new THREE.Mesh(roadGeoNS, M.road);
+      ns.rotation.x = -Math.PI / 2;
+      ns.position.set(k * 17, 0.03, 0);
+      sceneAdd("surface", ns);
+    }
+    // central plaza ring (lighter cobble)
+    const plaza = new THREE.Mesh(new THREE.CircleGeometry(14, 32), M.curb);
+    plaza.rotation.x = -Math.PI / 2;
+    plaza.position.set(0, 0.04, 0);
+    sceneAdd("surface", plaza);
+
+    // =====================================================================
+    // SURFACE — THE CITY (18th-century plaster + timber, pitched roofs)
+    // =====================================================================
+    const facadeMats = [M.plaster, M.plasterDark, M.plaster, M.stone3];
     const GRID = 7; // 15x15
     for (let i = -GRID; i <= GRID; i++) {
       for (let j = -GRID; j <= GRID; j++) {
@@ -623,40 +651,85 @@ export default function AnthemGame() {
         if (i === 0 && j === -6) continue; // council
         const x = i * 17 + (rand() - 0.5) * 1.4;
         const z = j * 17 + (rand() - 0.5) * 1.4;
-        const w = 9 + rand() * 5;
-        const dd = 9 + rand() * 5;
-        const h = 10 + rand() * 24;
-        addBox("surface", x, 0, z, w, h, dd, stoneMats[Math.floor(rand() * 4)]);
-        // window strip (single quad, much cheaper than many small ones)
+        const w = 8 + rand() * 4;
+        const dd = 8 + rand() * 4;
+        const h = 4.5 + rand() * 4.5; // squat 18th-century scale
+        const mat = facadeMats[Math.floor(rand() * 4)];
+        addBox("surface", x, 0, z, w, h, dd, mat);
+        // exposed timber bands (Tudor-ish)
         if (rand() > 0.4) {
+          const band = new THREE.Mesh(new THREE.BoxGeometry(w + 0.05, 0.3, dd + 0.05), M.timber);
+          band.position.set(x, h * 0.55, z);
+          sceneAdd("surface", band);
+        }
+        // pitched gable roof — wider than building, like overhanging eaves
+        const roofGeo = new THREE.ConeGeometry(Math.max(w, dd) * 0.78, 2.6 + rand() * 1.4, 4);
+        const roofMesh = new THREE.Mesh(roofGeo, M.roof);
+        roofMesh.rotation.y = Math.PI / 4;
+        roofMesh.position.set(x, h + 1.3, z);
+        sceneAdd("surface", roofMesh);
+        // chimney
+        if (rand() > 0.55) {
+          addBox("surface", x + (rand() - 0.5) * w * 0.5, h + 0.4, z + (rand() - 0.5) * dd * 0.5,
+            0.6, 1.6, 0.6, M.stone3, false);
+        }
+        // warm window — emissive only
+        if (rand() > 0.3) {
           const face = j > 0 ? "north" : j < 0 ? "south" : i > 0 ? "west" : "east";
-          const win = new THREE.Mesh(new THREE.PlaneGeometry(w * 0.55, h * 0.5), M.window);
-          if (face === "south") { win.position.set(x, h * 0.45, z + dd / 2 + 0.03); }
-          else if (face === "north") { win.position.set(x, h * 0.45, z - dd / 2 - 0.03); win.rotation.y = Math.PI; }
-          else if (face === "east") { win.position.set(x + w / 2 + 0.03, h * 0.45, z); win.rotation.y = Math.PI / 2; }
-          else { win.position.set(x - w / 2 - 0.03, h * 0.45, z); win.rotation.y = -Math.PI / 2; }
+          const win = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 1.0), M.window);
+          const wy = 1.5 + rand() * (h - 3);
+          if (face === "south") { win.position.set(x, wy, z + dd / 2 + 0.03); }
+          else if (face === "north") { win.position.set(x, wy, z - dd / 2 - 0.03); win.rotation.y = Math.PI; }
+          else if (face === "east") { win.position.set(x + w / 2 + 0.03, wy, z); win.rotation.y = Math.PI / 2; }
+          else { win.position.set(x - w / 2 - 0.03, wy, z); win.rotation.y = -Math.PI / 2; }
           sceneAdd("surface", win);
         }
       }
     }
 
-    // Lamps along boulevards — emissive only (no PointLights, perf)
+    // Fire-burning street lamps along boulevards
+    const lampGeo = new THREE.CylinderGeometry(0.08, 0.12, 4.5, 6);
+    const flameGeo = new THREE.ConeGeometry(0.28, 0.7, 6);
+    const flameCoreGeo = new THREE.ConeGeometry(0.14, 0.45, 6);
+    const flickerLamps: { light: THREE.PointLight; base: number; cone: THREE.Mesh }[] = [];
     for (let k = -GRID; k <= GRID; k++) {
       if (k === 0) continue;
       for (const [lx, lz] of [[-5, k * 17], [5, k * 17], [k * 17, -5], [k * 17, 5]] as const) {
-        addBox("surface", lx, 0, lz, 0.3, 4.5, 0.3, M.bedFrame, false);
-        const b = new THREE.Mesh(G.lamp, M.lantern);
-        b.position.set(lx, 4.6, lz);
-        sceneAdd("surface", b);
+        const post = new THREE.Mesh(lampGeo, M.timber);
+        post.position.set(lx, 2.25, lz);
+        sceneAdd("surface", post);
+        // wrought-iron cap
+        addBox("surface", lx, 4.55, lz, 0.4, 0.15, 0.4, M.bedFrame, false);
+        // flame
+        const flame = new THREE.Mesh(flameGeo, M.flame);
+        flame.position.set(lx, 5.0, lz);
+        sceneAdd("surface", flame);
+        const core = new THREE.Mesh(flameCoreGeo, M.flameCore);
+        core.position.set(lx, 4.95, lz);
+        sceneAdd("surface", core);
+        // every third lamp gets a real flickering light (perf)
+        if ((Math.abs(k) + (lx > 0 ? 0 : 1)) % 3 === 0) {
+          const pl = new THREE.PointLight(0xff8030, 1.4, 18);
+          pl.position.set(lx, 5.2, lz);
+          sceneAdd("surface", pl);
+          flickerLamps.push({ light: pl, base: 1.4, cone: flame });
+        }
       }
     }
-    // Central plaza fire — one real light
+    // Central plaza fire — bigger, real light
     const fire = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.4, 0.6, 12), M.fire);
     fire.position.set(0, 0.3, 0);
     sceneAdd("surface", fire);
-    const fireLight = new THREE.PointLight(0xff7733, 2.2, 50);
+    const plazaFlame = new THREE.Mesh(new THREE.ConeGeometry(1.0, 2.6, 8), M.flame);
+    plazaFlame.position.set(0, 1.8, 0);
+    sceneAdd("surface", plazaFlame);
+    const plazaCore = new THREE.Mesh(new THREE.ConeGeometry(0.5, 1.6, 8), M.flameCore);
+    plazaCore.position.set(0, 1.6, 0);
+    sceneAdd("surface", plazaCore);
+    const fireLight = new THREE.PointLight(0xff7733, 2.6, 60);
     fireLight.position.set(0, 2, 0);
     sceneAdd("surface", fireLight);
+    flickerLamps.push({ light: fireLight, base: 2.6, cone: plazaFlame });
 
     // =====================================================================
     // SURFACE — DORMITORY exterior shell
@@ -1147,11 +1220,13 @@ export default function AnthemGame() {
       lines: string[];
       idx: number;
       mesh: THREE.Group;
+      wander?: { cx: number; cz: number; r: number; phase: number; speed: number };
     };
     const npcs: NPC[] = [];
     const makeNPC = (
       key: SceneKey, x: number, z: number,
       robe: number, hair: number, name: string, lines: string[],
+      wander?: { r: number; speed: number },
     ) => {
       const g = new THREE.Group();
       const bd = new THREE.Mesh(
@@ -1171,14 +1246,19 @@ export default function AnthemGame() {
       hr.position.y = 2.05; hr.scale.y = 0.65; g.add(hr);
       g.position.set(x, 0, z);
       sceneAdd(key, g);
-      // soft collider so you can't walk through them
-      colliderSets[key].push({
-        box: new THREE.Box3(
-          new THREE.Vector3(x - 0.6, 0, z - 0.6),
-          new THREE.Vector3(x + 0.6, 2.2, z + 0.6),
-        ),
-      });
-      const npc: NPC = { sceneKey: key, position: new THREE.Vector3(x, 1, z), name, lines, idx: 0, mesh: g };
+      // Stationary NPCs get a soft collider; wanderers don't (would need per-frame updates)
+      if (!wander) {
+        colliderSets[key].push({
+          box: new THREE.Box3(
+            new THREE.Vector3(x - 0.6, 0, z - 0.6),
+            new THREE.Vector3(x + 0.6, 2.2, z + 0.6),
+          ),
+        });
+      }
+      const npc: NPC = {
+        sceneKey: key, position: new THREE.Vector3(x, 1, z), name, lines, idx: 0, mesh: g,
+        wander: wander ? { cx: x, cz: z, r: wander.r, phase: Math.random() * Math.PI * 2, speed: wander.speed } : undefined,
+      };
       npcs.push(npc);
       return npc;
     };
@@ -1223,28 +1303,53 @@ export default function AnthemGame() {
     const pickups: Pickup[] = [];
 
 
-    // Forge stall near the grate (cobble pillars + a roof + the lantern on a peg)
+    // Forge stall near the grate — EMPTY (the lantern is hidden elsewhere now)
     const FORGE_X = GRATE_X - 14, FORGE_Z = GRATE_Z - 4;
     addBox("surface", FORGE_X - 2, 0, FORGE_Z, 0.4, 3.2, 0.4, M.bedFrame);
     addBox("surface", FORGE_X + 2, 0, FORGE_Z, 0.4, 3.2, 0.4, M.bedFrame);
     addBox("surface", FORGE_X, 3.2, FORGE_Z, 5, 0.3, 3, M.roof, false);
     addBox("surface", FORGE_X, 0, FORGE_Z - 1.2, 4, 1.1, 1.8, M.stone3, false); // anvil bench
+    // empty peg where the lantern once hung
+    addBox("surface", FORGE_X, 2.0, FORGE_Z - 0.3, 0.1, 0.4, 0.1, M.bedFrame, false);
+    // forge embers (no lantern, but the coals still burn — fire feel)
+    const embers = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.2, 0.8), M.flame);
+    embers.position.set(FORGE_X, 1.25, FORGE_Z - 1.2);
+    sceneAdd("surface", embers);
+    const emberLight = new THREE.PointLight(0xff5520, 1.2, 10);
+    emberLight.position.set(FORGE_X, 1.6, FORGE_Z - 1.2);
+    sceneAdd("surface", emberLight);
+    flickerLamps.push({ light: emberLight, base: 1.2, cone: embers });
+    // a note pinned on the forge bench tells you where the lantern went
+    const forgeNote = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.04, 0.3),
+      new THREE.MeshStandardMaterial({ color: 0xeed9a4, emissive: 0xffe080, emissiveIntensity: 1.0 }));
+    forgeNote.position.set(FORGE_X, 1.72, FORGE_Z - 1.2);
+    sceneAdd("surface", forgeNote);
+    pickups.push({
+      kind: "scroll", sceneKey: "surface",
+      position: new THREE.Vector3(FORGE_X, 1.7, FORGE_Z - 1.2),
+      mesh: forgeNote, taken: false,
+      label: "Read the forge note",
+      scrollTitle: "Pinned to the empty forge",
+      scrollText: "The iron lantern is missing. Brother International borrowed it last night and hid it beneath his cot in the Home of the Street Sweepers. The Council must not see.",
+    });
+
+    // The actual lantern — hidden under a cot in the dormitory (must explore)
     const lanternHook = new THREE.Group();
     const lanternBody = new THREE.Mesh(
-      new THREE.BoxGeometry(0.45, 0.7, 0.45),
-      new THREE.MeshStandardMaterial({ color: 0x4a3a20, emissive: 0xffb060, emissiveIntensity: 1.4, metalness: 0.4, roughness: 0.5 }),
+      new THREE.BoxGeometry(0.4, 0.55, 0.4),
+      new THREE.MeshStandardMaterial({ color: 0x3a2a18, emissive: 0xffb060, emissiveIntensity: 1.6, metalness: 0.5, roughness: 0.5 }),
     );
     lanternHook.add(lanternBody);
-    lanternHook.position.set(FORGE_X, 2.0, FORGE_Z - 0.3);
-    sceneAdd("surface", lanternHook);
-    const lanternHookLight = new THREE.PointLight(0xffb060, 1.8, 14);
-    lanternHookLight.position.set(FORGE_X, 2.4, FORGE_Z - 0.3);
-    sceneAdd("surface", lanternHookLight);
+    lanternHook.position.set(-10, 0.35, 5); // under the far cot in the dorm
+    sceneAdd("dorm", lanternHook);
+    const lanternHiddenLight = new THREE.PointLight(0xffb060, 0.9, 6);
+    lanternHiddenLight.position.set(-10, 0.5, 5);
+    sceneAdd("dorm", lanternHiddenLight);
     pickups.push({
-      kind: "lantern", sceneKey: "surface",
-      position: new THREE.Vector3(FORGE_X, 1, FORGE_Z - 0.3),
+      kind: "lantern", sceneKey: "dorm",
+      position: new THREE.Vector3(-10, 0.5, 5),
       mesh: lanternHook, taken: false,
-      label: "Take the iron lantern",
+      label: "Take the hidden lantern",
     });
 
     // 3 forbidden fragments hidden across the world
@@ -1324,6 +1429,40 @@ export default function AnthemGame() {
       "Look not at us with pity — look, and remember the word.",
       "EGO. Say it once, when you are far from here.",
     ]);
+
+    // Wandering street NPCs — they walk slow circles along the boulevards
+    makeNPC("surface", 30, 8, 0x4a3a2a, 0x2a1a08, "Equality 9-1112", [
+      "We walk our route. The Council numbered us a Street Sweeper, same as you.",
+      "Lift your eyes from the cobbles too often and they note it, brother.",
+    ], { r: 10, speed: 0.6 });
+    makeNPC("surface", -40, 25, 0x3a4a3a, 0x1a2a1a, "Liberty 11-590", [
+      "We carry water for the Home of the Scholars. The pail is heavy. Our brothers are silent.",
+      "Once we saw a bird. It flew without permission.",
+    ], { r: 14, speed: 0.7 });
+    makeNPC("surface", 55, -22, 0x4a3a4a, 0x2a1a2a, "Harmony 7-2342", [
+      "Forty years we have swept the south boulevard. Forty.",
+      "If you go beyond the wall, do not come back to tell us. We could not bear to know.",
+    ], { r: 18, speed: 0.55 });
+    makeNPC("surface", -25, -55, 0x5a4a2a, 0x2a1a08, "Council Guard 8-2", [
+      "Halt. State your number. ...Pass, then. The Council does not mark you yet.",
+      "We watch the iron grating. Do not loiter near it, sweeper.",
+    ], { r: 8, speed: 0.45 });
+    makeNPC("surface", 20, -80, 0x3a3a5a, 0x1a1a2a, "Similarity 5-0306", [
+      "We are like our brothers. Our brothers are like us. There is comfort in that. There must be.",
+    ], { r: 12, speed: 0.65 });
+
+    // More fragments hidden across the world (now 5 total)
+    placeFragment("surface", -88, 1.2, 110, "Pick up the shard — a relic of the Unmentionable Times");
+    placeFragment("house", -8, 1.2, 8, "Pick up the shard — a relic of the Unmentionable Times");
+
+    // More scrolls (more side reading between checkpoints)
+    placeScroll("surface", -64, 1.2, 64, "Charcoal on the back of a sweeper's hut",
+      "We strive to be like all our brothers, for all men must be alike. ... And yet, in our heart — we have committed the great transgression. We have preferred our own work to that of our brothers.");
+    placeScroll("surface", 92, 1.2, -50, "A torn page caught in a lamp post",
+      "We loved the Science of Things. We wished to know. We wished to know about all the things which make the earth around us. ... It is not good to feel too much.");
+    placeScroll("underground", 0, 1.2, 60, "Carved into a tunnel beam",
+      "There were once a great many such tunnels. ... We do not know who made them. The Council does not speak of them. We are not permitted to wonder.");
+
 
 
     // =====================================================================
@@ -1802,13 +1941,38 @@ export default function AnthemGame() {
       for (const pk of pickups) {
         if (!pk.taken) pk.mesh.rotation.y += dt * 1.2;
       }
-      // npc face-player
+      // wandering NPCs walk slow circles + keep position in sync
+      const tw = now / 1000;
+      for (const n of npcs) {
+        if (!n.wander) continue;
+        const w = n.wander;
+        const ang = w.phase + tw * w.speed * 0.25;
+        const wx = w.cx + Math.cos(ang) * w.r;
+        const wz = w.cz + Math.sin(ang) * w.r;
+        n.mesh.position.x = wx;
+        n.mesh.position.z = wz;
+        n.position.set(wx, 1, wz);
+      }
+      // npc face-player (or walking direction if too far)
       for (const n of npcs) {
         if (n.sceneKey !== currentScene) continue;
         const dx = camera.position.x - SCENE_OFFSETS[currentScene] - n.mesh.position.x;
         const dz = camera.position.z - n.mesh.position.z;
-        n.mesh.rotation.y = Math.atan2(dx, dz);
+        const dist = Math.hypot(dx, dz);
+        if (n.wander && dist > 6) {
+          // face along walk path
+          const ang = n.wander.phase + tw * n.wander.speed * 0.25;
+          n.mesh.rotation.y = Math.atan2(-Math.sin(ang), Math.cos(ang)) + Math.PI / 2;
+        } else {
+          n.mesh.rotation.y = Math.atan2(dx, dz);
+        }
       }
+      // flicker fire lamps (cheap — small array)
+      for (const fl of flickerLamps) {
+        fl.light.intensity = fl.base + Math.sin(now * 0.013 + fl.light.position.x) * 0.15 + (Math.random() - 0.5) * 0.18;
+        fl.cone.scale.y = 1 + Math.sin(now * 0.018 + fl.light.position.z) * 0.12;
+      }
+
       setNearby(near);
 
       renderer.render(scene, camera);
@@ -1888,7 +2052,7 @@ export default function AnthemGame() {
               <span className={hasLantern ? "text-[#ffb070]" : "text-[#5a5040]"}>
                 {hasLantern ? "🏮 Lantern" : "○ No lantern"}
               </span>
-              <span className="text-[#e8c870]">✦ Fragments {fragments}/3</span>
+              <span className="text-[#e8c870]">✦ Fragments {fragments}/5</span>
             </div>
           </div>
           <div className="absolute top-4 right-4 z-10 text-right text-xs uppercase tracking-widest text-[#8a7a5a]">
