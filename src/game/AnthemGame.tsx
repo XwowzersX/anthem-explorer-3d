@@ -1430,6 +1430,40 @@ export default function AnthemGame() {
       "EGO. Say it once, when you are far from here.",
     ]);
 
+    // Wandering street NPCs — they walk slow circles along the boulevards
+    makeNPC("surface", 30, 8, 0x4a3a2a, 0x2a1a08, "Equality 9-1112", [
+      "We walk our route. The Council numbered us a Street Sweeper, same as you.",
+      "Lift your eyes from the cobbles too often and they note it, brother.",
+    ], { r: 10, speed: 0.6 });
+    makeNPC("surface", -40, 25, 0x3a4a3a, 0x1a2a1a, "Liberty 11-590", [
+      "We carry water for the Home of the Scholars. The pail is heavy. Our brothers are silent.",
+      "Once we saw a bird. It flew without permission.",
+    ], { r: 14, speed: 0.7 });
+    makeNPC("surface", 55, -22, 0x4a3a4a, 0x2a1a2a, "Harmony 7-2342", [
+      "Forty years we have swept the south boulevard. Forty.",
+      "If you go beyond the wall, do not come back to tell us. We could not bear to know.",
+    ], { r: 18, speed: 0.55 });
+    makeNPC("surface", -25, -55, 0x5a4a2a, 0x2a1a08, "Council Guard 8-2", [
+      "Halt. State your number. ...Pass, then. The Council does not mark you yet.",
+      "We watch the iron grating. Do not loiter near it, sweeper.",
+    ], { r: 8, speed: 0.45 });
+    makeNPC("surface", 20, -80, 0x3a3a5a, 0x1a1a2a, "Similarity 5-0306", [
+      "We are like our brothers. Our brothers are like us. There is comfort in that. There must be.",
+    ], { r: 12, speed: 0.65 });
+
+    // More fragments hidden across the world (now 5 total)
+    placeFragment("surface", -88, 1.2, 110, "Pick up the shard — a relic of the Unmentionable Times");
+    placeFragment("house", -8, 1.2, 8, "Pick up the shard — a relic of the Unmentionable Times");
+
+    // More scrolls (more side reading between checkpoints)
+    placeScroll("surface", -64, 1.2, 64, "Charcoal on the back of a sweeper's hut",
+      "We strive to be like all our brothers, for all men must be alike. ... And yet, in our heart — we have committed the great transgression. We have preferred our own work to that of our brothers.");
+    placeScroll("surface", 92, 1.2, -50, "A torn page caught in a lamp post",
+      "We loved the Science of Things. We wished to know. We wished to know about all the things which make the earth around us. ... It is not good to feel too much.");
+    placeScroll("underground", 0, 1.2, 60, "Carved into a tunnel beam",
+      "There were once a great many such tunnels. ... We do not know who made them. The Council does not speak of them. We are not permitted to wonder.");
+
+
 
     // =====================================================================
     // PLAYER-CARRIED LANTERN — point light parented to camera
