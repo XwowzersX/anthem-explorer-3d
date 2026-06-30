@@ -1941,13 +1941,38 @@ export default function AnthemGame() {
       for (const pk of pickups) {
         if (!pk.taken) pk.mesh.rotation.y += dt * 1.2;
       }
-      // npc face-player
+      // wandering NPCs walk slow circles + keep position in sync
+      const tw = now / 1000;
+      for (const n of npcs) {
+        if (!n.wander) continue;
+        const w = n.wander;
+        const ang = w.phase + tw * w.speed * 0.25;
+        const wx = w.cx + Math.cos(ang) * w.r;
+        const wz = w.cz + Math.sin(ang) * w.r;
+        n.mesh.position.x = wx;
+        n.mesh.position.z = wz;
+        n.position.set(wx, 1, wz);
+      }
+      // npc face-player (or walking direction if too far)
       for (const n of npcs) {
         if (n.sceneKey !== currentScene) continue;
         const dx = camera.position.x - SCENE_OFFSETS[currentScene] - n.mesh.position.x;
         const dz = camera.position.z - n.mesh.position.z;
-        n.mesh.rotation.y = Math.atan2(dx, dz);
+        const dist = Math.hypot(dx, dz);
+        if (n.wander && dist > 6) {
+          // face along walk path
+          const ang = n.wander.phase + tw * n.wander.speed * 0.25;
+          n.mesh.rotation.y = Math.atan2(-Math.sin(ang), Math.cos(ang)) + Math.PI / 2;
+        } else {
+          n.mesh.rotation.y = Math.atan2(dx, dz);
+        }
       }
+      // flicker fire lamps (cheap — small array)
+      for (const fl of flickerLamps) {
+        fl.light.intensity = fl.base + Math.sin(now * 0.013 + fl.light.position.x) * 0.15 + (Math.random() - 0.5) * 0.18;
+        fl.cone.scale.y = 1 + Math.sin(now * 0.018 + fl.light.position.z) * 0.12;
+      }
+
       setNearby(near);
 
       renderer.render(scene, camera);
