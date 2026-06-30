@@ -614,9 +614,32 @@ export default function AnthemGame() {
     sceneAdd("surface", ground);
 
     // =====================================================================
-    // SURFACE — THE CITY (denser-feeling but cheaper)
+    // SURFACE — STREETS (lighter paved roads on top of cobble ground)
     // =====================================================================
-    const stoneMats = [M.stone, M.stone2, M.stone3, M.stone4];
+    const roadGeoNS = new THREE.PlaneGeometry(6, 240);
+    const roadGeoEW = new THREE.PlaneGeometry(240, 6);
+    for (let k = -7; k <= 7; k++) {
+      // E/W avenue at z = k*17
+      const ew = new THREE.Mesh(roadGeoEW, M.road);
+      ew.rotation.x = -Math.PI / 2;
+      ew.position.set(0, 0.03, k * 17);
+      sceneAdd("surface", ew);
+      // N/S avenue at x = k*17
+      const ns = new THREE.Mesh(roadGeoNS, M.road);
+      ns.rotation.x = -Math.PI / 2;
+      ns.position.set(k * 17, 0.03, 0);
+      sceneAdd("surface", ns);
+    }
+    // central plaza ring (lighter cobble)
+    const plaza = new THREE.Mesh(new THREE.CircleGeometry(14, 32), M.curb);
+    plaza.rotation.x = -Math.PI / 2;
+    plaza.position.set(0, 0.04, 0);
+    sceneAdd("surface", plaza);
+
+    // =====================================================================
+    // SURFACE — THE CITY (18th-century plaster + timber, pitched roofs)
+    // =====================================================================
+    const facadeMats = [M.plaster, M.plasterDark, M.plaster, M.stone3];
     const GRID = 7; // 15x15
     for (let i = -GRID; i <= GRID; i++) {
       for (let j = -GRID; j <= GRID; j++) {
@@ -628,40 +651,85 @@ export default function AnthemGame() {
         if (i === 0 && j === -6) continue; // council
         const x = i * 17 + (rand() - 0.5) * 1.4;
         const z = j * 17 + (rand() - 0.5) * 1.4;
-        const w = 9 + rand() * 5;
-        const dd = 9 + rand() * 5;
-        const h = 10 + rand() * 24;
-        addBox("surface", x, 0, z, w, h, dd, stoneMats[Math.floor(rand() * 4)]);
-        // window strip (single quad, much cheaper than many small ones)
+        const w = 8 + rand() * 4;
+        const dd = 8 + rand() * 4;
+        const h = 4.5 + rand() * 4.5; // squat 18th-century scale
+        const mat = facadeMats[Math.floor(rand() * 4)];
+        addBox("surface", x, 0, z, w, h, dd, mat);
+        // exposed timber bands (Tudor-ish)
         if (rand() > 0.4) {
+          const band = new THREE.Mesh(new THREE.BoxGeometry(w + 0.05, 0.3, dd + 0.05), M.timber);
+          band.position.set(x, h * 0.55, z);
+          sceneAdd("surface", band);
+        }
+        // pitched gable roof — wider than building, like overhanging eaves
+        const roofGeo = new THREE.ConeGeometry(Math.max(w, dd) * 0.78, 2.6 + rand() * 1.4, 4);
+        const roofMesh = new THREE.Mesh(roofGeo, M.roof);
+        roofMesh.rotation.y = Math.PI / 4;
+        roofMesh.position.set(x, h + 1.3, z);
+        sceneAdd("surface", roofMesh);
+        // chimney
+        if (rand() > 0.55) {
+          addBox("surface", x + (rand() - 0.5) * w * 0.5, h + 0.4, z + (rand() - 0.5) * dd * 0.5,
+            0.6, 1.6, 0.6, M.stone3, false);
+        }
+        // warm window — emissive only
+        if (rand() > 0.3) {
           const face = j > 0 ? "north" : j < 0 ? "south" : i > 0 ? "west" : "east";
-          const win = new THREE.Mesh(new THREE.PlaneGeometry(w * 0.55, h * 0.5), M.window);
-          if (face === "south") { win.position.set(x, h * 0.45, z + dd / 2 + 0.03); }
-          else if (face === "north") { win.position.set(x, h * 0.45, z - dd / 2 - 0.03); win.rotation.y = Math.PI; }
-          else if (face === "east") { win.position.set(x + w / 2 + 0.03, h * 0.45, z); win.rotation.y = Math.PI / 2; }
-          else { win.position.set(x - w / 2 - 0.03, h * 0.45, z); win.rotation.y = -Math.PI / 2; }
+          const win = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 1.0), M.window);
+          const wy = 1.5 + rand() * (h - 3);
+          if (face === "south") { win.position.set(x, wy, z + dd / 2 + 0.03); }
+          else if (face === "north") { win.position.set(x, wy, z - dd / 2 - 0.03); win.rotation.y = Math.PI; }
+          else if (face === "east") { win.position.set(x + w / 2 + 0.03, wy, z); win.rotation.y = Math.PI / 2; }
+          else { win.position.set(x - w / 2 - 0.03, wy, z); win.rotation.y = -Math.PI / 2; }
           sceneAdd("surface", win);
         }
       }
     }
 
-    // Lamps along boulevards — emissive only (no PointLights, perf)
+    // Fire-burning street lamps along boulevards
+    const lampGeo = new THREE.CylinderGeometry(0.08, 0.12, 4.5, 6);
+    const flameGeo = new THREE.ConeGeometry(0.28, 0.7, 6);
+    const flameCoreGeo = new THREE.ConeGeometry(0.14, 0.45, 6);
+    const flickerLamps: { light: THREE.PointLight; base: number; cone: THREE.Mesh }[] = [];
     for (let k = -GRID; k <= GRID; k++) {
       if (k === 0) continue;
       for (const [lx, lz] of [[-5, k * 17], [5, k * 17], [k * 17, -5], [k * 17, 5]] as const) {
-        addBox("surface", lx, 0, lz, 0.3, 4.5, 0.3, M.bedFrame, false);
-        const b = new THREE.Mesh(G.lamp, M.lantern);
-        b.position.set(lx, 4.6, lz);
-        sceneAdd("surface", b);
+        const post = new THREE.Mesh(lampGeo, M.timber);
+        post.position.set(lx, 2.25, lz);
+        sceneAdd("surface", post);
+        // wrought-iron cap
+        addBox("surface", lx, 4.55, lz, 0.4, 0.15, 0.4, M.bedFrame, false);
+        // flame
+        const flame = new THREE.Mesh(flameGeo, M.flame);
+        flame.position.set(lx, 5.0, lz);
+        sceneAdd("surface", flame);
+        const core = new THREE.Mesh(flameCoreGeo, M.flameCore);
+        core.position.set(lx, 4.95, lz);
+        sceneAdd("surface", core);
+        // every third lamp gets a real flickering light (perf)
+        if ((Math.abs(k) + (lx > 0 ? 0 : 1)) % 3 === 0) {
+          const pl = new THREE.PointLight(0xff8030, 1.4, 18);
+          pl.position.set(lx, 5.2, lz);
+          sceneAdd("surface", pl);
+          flickerLamps.push({ light: pl, base: 1.4, cone: flame });
+        }
       }
     }
-    // Central plaza fire — one real light
+    // Central plaza fire — bigger, real light
     const fire = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.4, 0.6, 12), M.fire);
     fire.position.set(0, 0.3, 0);
     sceneAdd("surface", fire);
-    const fireLight = new THREE.PointLight(0xff7733, 2.2, 50);
+    const plazaFlame = new THREE.Mesh(new THREE.ConeGeometry(1.0, 2.6, 8), M.flame);
+    plazaFlame.position.set(0, 1.8, 0);
+    sceneAdd("surface", plazaFlame);
+    const plazaCore = new THREE.Mesh(new THREE.ConeGeometry(0.5, 1.6, 8), M.flameCore);
+    plazaCore.position.set(0, 1.6, 0);
+    sceneAdd("surface", plazaCore);
+    const fireLight = new THREE.PointLight(0xff7733, 2.6, 60);
     fireLight.position.set(0, 2, 0);
     sceneAdd("surface", fireLight);
+    flickerLamps.push({ light: fireLight, base: 2.6, cone: plazaFlame });
 
     // =====================================================================
     // SURFACE — DORMITORY exterior shell
