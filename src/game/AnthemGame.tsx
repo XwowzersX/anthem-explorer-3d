@@ -2052,7 +2052,7 @@ export default function AnthemGame() {
               <span className={hasLantern ? "text-[#ffb070]" : "text-[#5a5040]"}>
                 {hasLantern ? "🏮 Lantern" : "○ No lantern"}
               </span>
-              <span className="text-[#e8c870]">✦ Fragments {fragments}/3</span>
+              <span className="text-[#e8c870]">✦ Fragments {fragments}/5</span>
             </div>
           </div>
           <div className="absolute top-4 right-4 z-10 text-right text-xs uppercase tracking-widest text-[#8a7a5a]">
