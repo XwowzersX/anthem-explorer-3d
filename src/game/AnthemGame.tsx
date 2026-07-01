@@ -2107,6 +2107,43 @@ export default function AnthemGame() {
         onGround = true;
       }
 
+      // Chase logic — guards seek the player on surface; win by descending grate
+      if (chaseState.active && currentScene === "surface") {
+        chaseState.timeLeft -= dt;
+        if (frame % 10 === 0) setChase({ active: true, timeLeft: Math.max(0, chaseState.timeLeft) });
+        for (const g of chaseState.guards) {
+          const dir = new THREE.Vector3(camera.position.x - g.mesh.position.x, 0, camera.position.z - g.mesh.position.z);
+          const dist = dir.length();
+          if (dist > 0.1) dir.normalize().multiplyScalar(dt * 5.5);
+          g.mesh.position.x += dir.x; g.mesh.position.z += dir.z;
+          g.mesh.rotation.y = Math.atan2(dir.x, dir.z);
+          if (dist < 1.6) {
+            // Caught → reset to council doorstep, still chasing
+            camera.position.set(COUNCIL_CX, 1.7, COUNCIL_CZ + 26);
+            setNpcLine({ name: "Guard", line: "Halt! (You have been caught — try again.)" });
+          }
+        }
+        // Win: reach grate area
+        const dg2 = Math.hypot(camera.position.x - GRATE_X, camera.position.z - GRATE_Z);
+        if (dg2 < 4) {
+          chaseState.active = false;
+          setChase(null);
+          for (const g of chaseState.guards) g.mesh.visible = false;
+          chaseState.guards.length = 0;
+          setNpcLine({ name: "—", line: "You slip through the grate and vanish into the tunnels. They will not follow." });
+          setObjective("Flee through the Uncharted Forest");
+        }
+        if (chaseState.timeLeft <= 0 && chaseState.active) {
+          camera.position.set(COUNCIL_CX, 1.7, COUNCIL_CZ + 26);
+          chaseState.timeLeft = 45;
+        }
+      }
+
+      // Compass bearing — angle to next objective marker
+      // (updates HUD via a ref-mutated element to avoid React re-renders)
+
+
+
 
 
 
