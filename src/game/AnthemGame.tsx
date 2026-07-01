@@ -1972,7 +1972,9 @@ export default function AnthemGame() {
       }
       // lantern flicker while carrying
       if (hasLanternRef.current) {
-        carriedLantern.intensity = 1.9 + Math.sin(now * 0.012) * 0.25 + (Math.random() - 0.5) * 0.15;
+        carriedLantern.intensity = 3.2 + Math.sin(now * 0.012) * 0.4 + (Math.random() - 0.5) * 0.2;
+        lanternSpot.intensity = 6.0 + Math.sin(now * 0.014) * 0.6 + (Math.random() - 0.5) * 0.3;
+
       }
       // pickup bob
       for (const pk of pickups) {
