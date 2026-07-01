@@ -121,13 +121,18 @@ export default function AnthemGame() {
   const [muted, setMuted] = useState(false);
   const [hasLantern, setHasLantern] = useState(false);
   const [fragments, setFragments] = useState(0);
+  const [flowers, setFlowers] = useState(0);
   const [npcLine, setNpcLine] = useState<{ name: string; line: string } | null>(null);
+  const [compass, setCompass] = useState<{ yaw: number; targetAngle: number | null; label: string | null }>({ yaw: 0, targetAngle: null, label: null });
+  const [chase, setChase] = useState<{ active: boolean; timeLeft: number } | null>(null);
   const mutedRef = useRef(false);
   const masterGainRef = useRef<GainNode | null>(null);
   const hasLanternRef = useRef(false);
   const fragmentsRef = useRef(0);
+  const flowersRef = useRef(0);
   const npcLineRef = useRef<{ name: string; line: string } | null>(null);
   useEffect(() => { npcLineRef.current = npcLine; }, [npcLine]);
+
   useEffect(() => {
     mutedRef.current = muted;
     const g = masterGainRef.current;
@@ -164,7 +169,7 @@ export default function AnthemGame() {
       return t;
     };
     scene.background = makeSky();
-    scene.fog = new THREE.Fog(0x4a4858, 90, 520);
+    scene.fog = new THREE.Fog(0x3a3848, 60, 380);
 
     const camera = new THREE.PerspectiveCamera(74, mount.clientWidth / mount.clientHeight, 0.05, 900);
 
@@ -687,11 +692,11 @@ export default function AnthemGame() {
       }
     }
 
-    // Fire-burning street lamps along boulevards
+    // Fire-burning street lamps along boulevards — every lamp animated
     const lampGeo = new THREE.CylinderGeometry(0.08, 0.12, 4.5, 6);
     const flameGeo = new THREE.ConeGeometry(0.28, 0.7, 6);
     const flameCoreGeo = new THREE.ConeGeometry(0.14, 0.45, 6);
-    const flickerLamps: { light: THREE.PointLight; base: number; cone: THREE.Mesh }[] = [];
+    const flickerLamps: { light: THREE.PointLight | null; base: number; cone: THREE.Mesh; core?: THREE.Mesh }[] = [];
     for (let k = -GRID; k <= GRID; k++) {
       if (k === 0) continue;
       for (const [lx, lz] of [[-5, k * 17], [5, k * 17], [k * 17, -5], [k * 17, 5]] as const) {
@@ -707,15 +712,18 @@ export default function AnthemGame() {
         const core = new THREE.Mesh(flameCoreGeo, M.flameCore);
         core.position.set(lx, 4.95, lz);
         sceneAdd("surface", core);
-        // every third lamp gets a real flickering light (perf)
-        if ((Math.abs(k) + (lx > 0 ? 0 : 1)) % 3 === 0) {
-          const pl = new THREE.PointLight(0xff8030, 1.4, 18);
+        // real PointLight only on every 3rd (perf), but ALL flames animate
+        const hasLight = (Math.abs(k) + (lx > 0 ? 0 : 1)) % 3 === 0;
+        let pl: THREE.PointLight | null = null;
+        if (hasLight) {
+          pl = new THREE.PointLight(0xff8030, 1.4, 18);
           pl.position.set(lx, 5.2, lz);
           sceneAdd("surface", pl);
-          flickerLamps.push({ light: pl, base: 1.4, cone: flame });
         }
+        flickerLamps.push({ light: pl, base: 1.4, cone: flame, core });
       }
     }
+
     // Central plaza fire — bigger, real light
     const fire = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.4, 0.6, 12), M.fire);
     fire.position.set(0, 0.3, 0);
@@ -759,11 +767,19 @@ export default function AnthemGame() {
     let grateSlideT = 0;
 
     // =====================================================================
-    // SURFACE — FIELD (south, beyond a low wall with a gap at center)
+    // SURFACE — FIELD (fully fenced, only opens through the south wall gap)
     // =====================================================================
     for (let x = -140; x <= 140; x += 5) {
       if (Math.abs(x) < 5) continue;
       addBox("surface", x, 0, 150, 4.5, 2.4, 1.2, M.plasterDark);
+    }
+    // wheat field perimeter fence — east, west, and far south sides
+    for (let z = 152; z <= 388; z += 4) {
+      addBox("surface", -140, 0, z, 0.4, 1.6, 4, M.woodDark);
+      addBox("surface", 140, 0, z, 0.4, 1.6, 4, M.woodDark);
+    }
+    for (let x = -140; x <= 140; x += 4) {
+      addBox("surface", x, 0, 388, 4, 1.6, 0.4, M.woodDark);
     }
     const fieldMesh = new THREE.Mesh(new THREE.PlaneGeometry(340, 240), M.grass);
     fieldMesh.rotation.x = -Math.PI / 2;
@@ -775,6 +791,18 @@ export default function AnthemGame() {
       tuft.position.set((rand() - 0.5) * 320, 0.65, 170 + rand() * 200);
       sceneAdd("surface", tuft);
     }
+    // Three wildflowers scattered in the field — the puzzle
+    const flowerMat = new THREE.MeshStandardMaterial({ color: 0xffe0f0, emissive: 0xff80c0, emissiveIntensity: 1.4, roughness: 0.5 });
+    const flowerMeshes: THREE.Mesh[] = [];
+    const flowerPositions: [number, number][] = [[-60, 210], [40, 320], [90, 260]];
+    for (const [fx, fz] of flowerPositions) {
+      const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 1.0, 5), M.tuft);
+      stem.position.set(fx, 0.5, fz); sceneAdd("surface", stem);
+      const petals = new THREE.Mesh(new THREE.SphereGeometry(0.22, 8, 6), flowerMat);
+      petals.position.set(fx, 1.05, fz); sceneAdd("surface", petals);
+      flowerMeshes.push(petals);
+    }
+
     // Liberty 5-3000
     const liberty = new THREE.Group();
     const body = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.45, 1.7, 10),
@@ -846,6 +874,49 @@ export default function AnthemGame() {
     const FOREST_X = -200, FOREST_Z = 0;
     const forestMarker = addBox("surface", FOREST_X, 0, FOREST_Z, 1.5, 0.3, 1.5, M.altar, false);
     forestMarker.position.y = 0.15;
+
+    // =====================================================================
+    // WORLD BORDER — ring of trees + invisible wall + heavy outer fog
+    // =====================================================================
+    // A big ring at radius ~460 so the surface world stops feeling infinite.
+    const BORDER_R = 460;
+    for (let a = 0; a < Math.PI * 2; a += 0.05) {
+      const bx = Math.cos(a) * BORDER_R;
+      const bz = Math.sin(a) * BORDER_R;
+      // Skip if too close to forest region (already has trees)
+      if (bx < -140 && Math.abs(bz) < 240) continue;
+      const trunk = new THREE.Mesh(trunkGeo, M.trunk);
+      trunk.position.set(bx, 4.5, bz);
+      sceneAdd("surface", trunk);
+      const top = new THREE.Mesh(topGeo, M.leaves);
+      top.position.set(bx, 11, bz);
+      sceneAdd("surface", top);
+    }
+    // A second inner ring so it reads as a wall of woods
+    for (let a = 0.025; a < Math.PI * 2; a += 0.06) {
+      const r = BORDER_R - 12;
+      const bx = Math.cos(a) * r, bz = Math.sin(a) * r;
+      if (bx < -140 && Math.abs(bz) < 240) continue;
+      const trunk = new THREE.Mesh(trunkGeo, M.trunk);
+      trunk.position.set(bx, 4.5, bz);
+      sceneAdd("surface", trunk);
+      const top = new THREE.Mesh(topGeo, M.leaves);
+      top.position.set(bx, 11, bz);
+      sceneAdd("surface", top);
+    }
+    // Hard invisible wall at radius BORDER_R + 4 — implemented as segmented boxes
+    for (let a = 0; a < Math.PI * 2; a += 0.2) {
+      const r = BORDER_R + 6;
+      const bx = Math.cos(a) * r, bz = Math.sin(a) * r;
+      const box = new THREE.Box3(
+        new THREE.Vector3(bx - 20, 0, bz - 20),
+        new THREE.Vector3(bx + 20, 30, bz + 20),
+      );
+      // Only add walls that don't cover playable area (skip anything inside r-30)
+      if (Math.hypot(bx, bz) > BORDER_R) colliderSets.surface.push({ box });
+    }
+
+
 
     // =====================================================================
     // SURFACE — GLASS HOUSE EXTERIOR
@@ -1081,17 +1152,50 @@ export default function AnthemGame() {
     // east/west walls solid
     addBox("underground", CHX + CHS / 2, 0, CHZ, 0.4, JH, CHS, M.tunnelWall);
     addBox("underground", CHX - CHS / 2, 0, CHZ, 0.4, JH, CHS, M.tunnelWall);
-    // Altar and the glass light box
-    const lbAltar = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.7, 1.6), M.altar);
-    lbAltar.position.set(CHX, 0.35, CHZ - 2);
+    // Altar — a wooden workbench with the invention on top
+    const lbAltar = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.9, 1.8), M.altar);
+    lbAltar.position.set(CHX, 0.45, CHZ - 2);
     sceneAdd("underground", lbAltar);
-    const lightBox = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.9, 0.7),
-      new THREE.MeshStandardMaterial({ color: 0xfff8dd, emissive: 0xfff0aa, emissiveIntensity: 2.0 }));
-    lightBox.position.set(CHX, 1.15, CHZ - 2);
+    // Wooden base for the bulb (like a physics prof's apparatus)
+    const bulbBase = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.25, 0.8),
+      new THREE.MeshStandardMaterial({ color: 0x3a2818, map: T.wood, roughness: 0.9 }));
+    bulbBase.position.set(CHX, 1.0, CHZ - 2);
+    sceneAdd("underground", bulbBase);
+    // Brass socket
+    const socket = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.18, 0.35, 12),
+      new THREE.MeshStandardMaterial({ color: 0xb08838, metalness: 0.85, roughness: 0.3 }));
+    socket.position.set(CHX, 1.32, CHZ - 2);
+    sceneAdd("underground", socket);
+    // Glass bulb (the "light without fire")
+    const lightBox = new THREE.Mesh(new THREE.SphereGeometry(0.28, 20, 16),
+      new THREE.MeshStandardMaterial({
+        color: 0xfff8dd, emissive: 0xfff0aa, emissiveIntensity: 2.2,
+        transparent: true, opacity: 0.85, roughness: 0.1, metalness: 0.1,
+      }));
+    lightBox.position.set(CHX, 1.68, CHZ - 2);
     sceneAdd("underground", lightBox);
-    const lbLight = new THREE.PointLight(0xffeeaa, 3, 35);
-    lbLight.position.set(CHX, 2.5, CHZ - 2);
+    // Filament (thin bright wire loop)
+    const filament = new THREE.Mesh(new THREE.TorusGeometry(0.09, 0.008, 6, 16),
+      new THREE.MeshBasicMaterial({ color: 0xfff4c0 }));
+    filament.position.set(CHX, 1.68, CHZ - 2);
+    filament.rotation.x = Math.PI / 2;
+    sceneAdd("underground", filament);
+    // Copper wires trailing from base to a small battery/jar
+    const jar = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.5, 10),
+      new THREE.MeshStandardMaterial({ color: 0x8a9aa8, metalness: 0.7, roughness: 0.3, transparent: true, opacity: 0.6 }));
+    jar.position.set(CHX + 0.7, 1.15, CHZ - 2);
+    sceneAdd("underground", jar);
+    for (let w = 0; w < 2; w++) {
+      const wire = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.7, 6),
+        new THREE.MeshStandardMaterial({ color: 0xb87a3a, metalness: 0.8, roughness: 0.4 }));
+      wire.position.set(CHX + 0.35, 1.15 + (w === 0 ? 0.15 : -0.05), CHZ - 2);
+      wire.rotation.z = Math.PI / 2;
+      sceneAdd("underground", wire);
+    }
+    const lbLight = new THREE.PointLight(0xffeeaa, 3.5, 40);
+    lbLight.position.set(CHX, 2.4, CHZ - 2);
     sceneAdd("underground", lbLight);
+
 
     // Stair pad back to the surface — placed in the junction
     const stair = new THREE.Mesh(new THREE.BoxGeometry(3, 0.25, 3), M.exitPad);
@@ -1150,6 +1254,27 @@ export default function AnthemGame() {
     councilExit.position.set(0, 0.08, C_D / 2 - 1.5);
     sceneAdd("council", councilExit);
     addBox("council", 0, 0, C_D / 2 - 0.3, 6, 9, 0.4, M.doorWood, false);
+
+    // Five Council scholars seated behind the table (cutscene actors)
+    const councilBoard: { mesh: THREE.Group; pos: THREE.Vector3; name: string }[] = [];
+    const councilNames = ["World Scholar 1-8100", "Scholar Collective 1-1998", "Judge 2-5991", "Council 8-4111", "Scholar 3-0090"];
+    for (let i = -2; i <= 2; i++) {
+      const g = new THREE.Group();
+      const robe = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.6, 2.0, 10),
+        new THREE.MeshStandardMaterial({ color: 0x2a2018, roughness: 0.95 }));
+      robe.position.y = 1.0; g.add(robe);
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.32, 12, 10),
+        new THREE.MeshStandardMaterial({ color: 0xe8c8a8, roughness: 0.8 }));
+      head.position.y = 2.25; g.add(head);
+      const hood = new THREE.Mesh(new THREE.ConeGeometry(0.42, 0.7, 8),
+        new THREE.MeshStandardMaterial({ color: 0x1a1410, roughness: 0.9 }));
+      hood.position.y = 2.55; g.add(hood);
+      g.position.set(i * 3.4, 0, -C_D / 2 + 3);
+      g.rotation.y = Math.PI; // face south toward player
+      sceneAdd("council", g);
+      councilBoard.push({ mesh: g, pos: new THREE.Vector3(i * 3.4, 1, -C_D / 2 + 3), name: councilNames[i + 2] });
+    }
+
 
     // =====================================================================
     // INTERIOR — GLASS HOUSE (period: rugs, books, mirrors)
@@ -1468,9 +1593,18 @@ export default function AnthemGame() {
     // =====================================================================
     // PLAYER-CARRIED LANTERN — point light parented to camera
     // =====================================================================
-    const carriedLantern = new THREE.PointLight(0xffb070, 0.0, 22);
-    carriedLantern.position.set(0.4, -0.2, -0.3);
+    // PLAYER LANTERN — bright omni + forward SpotLight cone so it lights the world
+    const carriedLantern = new THREE.PointLight(0xffc080, 0.0, 55, 1.3);
+    carriedLantern.position.set(0.4, -0.2, -0.2);
     camera.add(carriedLantern);
+    const lanternSpot = new THREE.SpotLight(0xffd08a, 0.0, 60, Math.PI / 3.2, 0.55, 1.2);
+    lanternSpot.position.set(0.3, -0.1, -0.2);
+    const spotTarget = new THREE.Object3D();
+    spotTarget.position.set(0.3, -0.1, -20);
+    camera.add(spotTarget);
+    lanternSpot.target = spotTarget;
+    camera.add(lanternSpot);
+
     scene.add(camera); // camera must be in scene graph for its children to render
 
 
@@ -1644,15 +1778,89 @@ export default function AnthemGame() {
       if (order >= STORY.length) setFinished(true);
     };
 
+    // Council cutscene → chase scene machinery
+    const councilLines: { by: number; line: string }[] = [
+      { by: 0, line: "You bring a thing not given by the Council. Explain yourself, street sweeper." },
+      { by: 2, line: "It is a light without fire! It will banish the dark from every Home in the city!" },
+      { by: 4, line: "How dared you, gutter cleaner, to think that your mind held greater wisdom than the minds of your brothers?" },
+      { by: 1, line: "The candle was made by the collective. It is a good thing. Why should you seek to replace it?" },
+      { by: 3, line: "You have worked alone. This is the great transgression. There is no crime blacker." },
+      { by: 0, line: "Guards! Seize him — the light must be broken and the offender broken with it!" },
+    ];
+    let cutsceneIdx = 0;
+    const spawnGuards = () => {
+      // 3 guards spawn near the council door on the surface, they chase the player
+      for (let i = 0; i < 3; i++) {
+        const g = new THREE.Group();
+        const body = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.55, 1.9, 10),
+          new THREE.MeshStandardMaterial({ color: 0x502010, roughness: 0.85 }));
+        body.position.y = 0.95; g.add(body);
+        const head = new THREE.Mesh(new THREE.SphereGeometry(0.3, 12, 10),
+          new THREE.MeshStandardMaterial({ color: 0x2a1a0a }));
+        head.position.y = 2.15; g.add(head);
+        // spear
+        const spear = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 2.6, 6),
+          new THREE.MeshStandardMaterial({ color: 0x3a2a18 }));
+        spear.position.set(0.5, 1.2, 0); g.add(spear);
+        g.position.set(COUNCIL_CX + (i - 1) * 3, 0, COUNCIL_CZ + 22);
+        sceneAdd("surface", g);
+        chaseState.guards.push({ mesh: g, pos: g.position.clone() });
+      }
+    };
+    const startChase = () => {
+      chaseState.active = true;
+      chaseState.timeLeft = 60;
+      setChase({ active: true, timeLeft: 60 });
+      setObjective("RUN — reach the iron grate! (Council guards are chasing)");
+      spawnGuards();
+      // exit council automatically
+      switchScene("surface", new THREE.Vector3(COUNCIL_CX, 1.7, COUNCIL_CZ + 24), 0);
+      sfx.bell();
+    };
+    const advanceCouncilCutscene = () => {
+      if (cutsceneIdx >= councilLines.length) {
+        // Done — start chase
+        setNpcLine(null);
+        startChase();
+        return;
+      }
+      const l = councilLines[cutsceneIdx++];
+      setNpcLine({ name: councilBoard[l.by].name, line: l.line });
+      sfx.interact();
+    };
+
+
     const tryInteract = () => {
       if (activeBeatRef.current) {
         setActiveBeat(null);
         activeBeatRef.current = null;
         return;
       }
+      // If council cutscene is running, E advances lines
+      if (councilCutscene.active) {
+        advanceCouncilCutscene();
+        return;
+      }
       if (npcLineRef.current) { npcLineRef.current = null; setNpcLine(null); return; }
       const p = camera.position;
       const localP = new THREE.Vector3(p.x - SCENE_OFFSETS[currentScene], p.y, p.z);
+
+      // FLOWERS — pluck in field
+      if (currentScene === "surface" && progressRef.current === 2) {
+        for (let i = 0; i < flowerMeshes.length; i++) {
+          const fm = flowerMeshes[i];
+          if (!fm.visible) continue;
+          if (localP.distanceTo(fm.position) < 2.0) {
+            fm.visible = false;
+            flowersRef.current += 1;
+            setFlowers(flowersRef.current);
+            sfx.interact();
+            setNpcLine({ name: "—", line: `You pluck a wildflower. (${flowersRef.current}/3) — offer them to the Golden One.` });
+            return;
+          }
+        }
+      }
+
 
       // PICKUPS first — they're small and easy to miss
       for (const pk of pickups) {
@@ -1669,7 +1877,7 @@ export default function AnthemGame() {
           if (pk.kind === "lantern") {
             hasLanternRef.current = true;
             setHasLantern(true);
-            carriedLantern.intensity = 2.2;
+            carriedLantern.intensity = 3.5; lanternSpot.intensity = 6.5;
           } else {
             fragmentsRef.current += 1;
             setFragments(fragmentsRef.current);
@@ -1756,6 +1964,18 @@ export default function AnthemGame() {
         if (d < bestD) { bestD = d; best = it; }
       }
       if (best) {
+        // Puzzle gate: Golden One requires all 3 flowers
+        if (best.beatId === "field_meet" && flowersRef.current < 3) {
+          setNpcLine({ name: "Golden One", line: `Bring me a token of the earth — three wildflowers from the field. (${flowersRef.current}/3)` });
+          return;
+        }
+        // Council: run the cutscene instead of instant-advance
+        if (best.beatId === "council" && !councilCutscene.active) {
+          councilCutscene.active = true;
+          cutsceneIdx = 0;
+          advanceCouncilCutscene();
+          return;
+        }
         const beat = STORY.find(b => b.id === best!.beatId)!;
         setActiveBeat(beat); activeBeatRef.current = beat;
         sfx.interact();
@@ -1763,6 +1983,7 @@ export default function AnthemGame() {
         advanceTo(best.order + 1);
       }
     };
+
 
 
     // =====================================================================
@@ -1779,8 +2000,32 @@ export default function AnthemGame() {
     let onGround = true;
     const GRAVITY = 22;
     const JUMP_V = 8;
-    const GROUND_Y = 1.7;
+    const STAND_Y = 1.7;
+    const CROUCH_Y = 1.05;
+    let groundY = STAND_Y;
     let stepAccum = 0;
+
+    // Chase-scene state
+    const chaseState = { active: false, timeLeft: 0, guards: [] as { mesh: THREE.Group; pos: THREE.Vector3 }[] };
+    const councilCutscene = { active: false, step: 0, timer: 0 };
+    // Surface-material footstep pickers
+    const surfaceKind = (): "cobble" | "grass" | "wood" | "stone" | "dirt" => {
+      if (currentScene === "dorm" || currentScene === "house") return "wood";
+      if (currentScene === "underground" || currentScene === "council") return "stone";
+      // surface: grass in field/forest, cobble in city
+      const p = camera.position; const lz = p.z, lx = p.x;
+      if (lz > 150) return "grass"; // field
+      if (lx < -140) return "grass"; // forest
+      return "cobble";
+    };
+    const doFootstep = () => {
+      const k = surfaceKind();
+      if (k === "grass") noiseBurst(0.12, 380, 3, 0.16, 0.05);
+      else if (k === "wood") { noiseBurst(0.09, 260, 6, 0.19, 0.08); blip(140, 0.06, "sine", 0.09, 0.05); }
+      else if (k === "stone") noiseBurst(0.08, 500, 10, 0.18, 0.35);
+      else /* cobble */ noiseBurst(0.09, 340, 9, 0.2, 0.15);
+    };
+
 
 
 
@@ -1830,39 +2075,86 @@ export default function AnthemGame() {
       );
       if (!activeColliders.some(c => c.box.intersectsBox(bz))) camera.position.z += velocity.z;
 
-      // footstep cadence
+      // crouch — hold Ctrl or C
+      const crouching = !!(keys["ControlLeft"] || keys["ControlRight"] || keys["KeyC"]);
+      groundY = crouching ? CROUCH_Y : STAND_Y;
+      // footstep cadence — surface-based, quieter while crouched
       const horizSpeed = Math.hypot(velocity.x, velocity.z);
-      if (onGround && horizSpeed > 0.02) {
+      if (onGround && horizSpeed > 0.02 && !crouching) {
         stepAccum += horizSpeed;
         const cadence = (keys["ShiftLeft"] || keys["ShiftRight"]) ? 0.55 : 0.85;
         if (stepAccum > cadence) {
           stepAccum = 0;
-          sfx.footstep();
+          doFootstep();
         }
       } else {
         stepAccum = Math.max(0, stepAccum - dt);
       }
 
       // jump + gravity
-      if (keys["Space"] && onGround && !activeBeatRef.current && document.pointerLockElement === renderer.domElement) {
+      if (keys["Space"] && onGround && !crouching && !activeBeatRef.current && document.pointerLockElement === renderer.domElement) {
         vy = JUMP_V;
         onGround = false;
-        sfx.jump();
+        blip(320, 0.09, "sine", 0.14, 0.1); noiseBurst(0.08, 620, 5, 0.12, 0.08);
       }
       vy -= GRAVITY * dt;
       camera.position.y += vy * dt;
-      if (camera.position.y <= GROUND_Y) {
+      if (camera.position.y <= groundY) {
         const wasFalling = !onGround;
-        camera.position.y = GROUND_Y;
+        camera.position.y = groundY;
         vy = 0;
         if (wasFalling) sfx.land();
         onGround = true;
       }
 
+      // Chase logic — guards seek the player on surface; win by descending grate
+      if (chaseState.active && currentScene === "surface") {
+        chaseState.timeLeft -= dt;
+        if (frame % 10 === 0) setChase({ active: true, timeLeft: Math.max(0, chaseState.timeLeft) });
+        for (const g of chaseState.guards) {
+          const dir = new THREE.Vector3(camera.position.x - g.mesh.position.x, 0, camera.position.z - g.mesh.position.z);
+          const dist = dir.length();
+          if (dist > 0.1) dir.normalize().multiplyScalar(dt * 5.5);
+          g.mesh.position.x += dir.x; g.mesh.position.z += dir.z;
+          g.mesh.rotation.y = Math.atan2(dir.x, dir.z);
+          if (dist < 1.6) {
+            // Caught → reset to council doorstep, still chasing
+            camera.position.set(COUNCIL_CX, 1.7, COUNCIL_CZ + 26);
+            setNpcLine({ name: "Guard", line: "Halt! (You have been caught — try again.)" });
+          }
+        }
+        // Win: reach grate area
+        const dg2 = Math.hypot(camera.position.x - GRATE_X, camera.position.z - GRATE_Z);
+        if (dg2 < 4) {
+          chaseState.active = false;
+          setChase(null);
+          for (const g of chaseState.guards) g.mesh.visible = false;
+          chaseState.guards.length = 0;
+          setNpcLine({ name: "—", line: "You slip through the grate and vanish into the tunnels. They will not follow." });
+          setObjective("Flee through the Uncharted Forest");
+        }
+        if (chaseState.timeLeft <= 0 && chaseState.active) {
+          camera.position.set(COUNCIL_CX, 1.7, COUNCIL_CZ + 26);
+          chaseState.timeLeft = 45;
+        }
+      }
+
+      // Compass — throttled
+      if (frame % 6 === 0) setCompass({ yaw, targetAngle: null, label: null });
+
+
+
+
+
+
+
 
       // bobs
       const t = now / 600;
-      lightBox.position.y = 1.15 + Math.sin(t) * 0.08;
+      lightBox.position.y = 1.68 + Math.sin(t) * 0.02;
+      filament.position.y = 1.68 + Math.sin(t) * 0.02;
+      lbLight.intensity = 3.4 + Math.sin(t * 3) * 0.2 + (Math.random() - 0.5) * 0.15;
+
       lightBox.rotation.y += dt * 0.6;
       bookGroup.position.y = 1.5 + Math.sin(t * 0.8) * 0.07;
       bookGroup.rotation.y += dt * 0.3;
@@ -1935,7 +2227,9 @@ export default function AnthemGame() {
       }
       // lantern flicker while carrying
       if (hasLanternRef.current) {
-        carriedLantern.intensity = 1.9 + Math.sin(now * 0.012) * 0.25 + (Math.random() - 0.5) * 0.15;
+        carriedLantern.intensity = 3.2 + Math.sin(now * 0.012) * 0.4 + (Math.random() - 0.5) * 0.2;
+        lanternSpot.intensity = 6.0 + Math.sin(now * 0.014) * 0.6 + (Math.random() - 0.5) * 0.3;
+
       }
       // pickup bob
       for (const pk of pickups) {
@@ -1969,9 +2263,11 @@ export default function AnthemGame() {
       }
       // flicker fire lamps (cheap — small array)
       for (const fl of flickerLamps) {
-        fl.light.intensity = fl.base + Math.sin(now * 0.013 + fl.light.position.x) * 0.15 + (Math.random() - 0.5) * 0.18;
-        fl.cone.scale.y = 1 + Math.sin(now * 0.018 + fl.light.position.z) * 0.12;
+        if (fl.light) fl.light.intensity = fl.base + Math.sin(now * 0.013 + fl.light.position.x) * 0.15 + (Math.random() - 0.5) * 0.18;
+        fl.cone.scale.y = 1 + Math.sin(now * 0.018 + fl.cone.position.z + fl.cone.position.x) * 0.18;
+        if (fl.core) fl.core.scale.y = 1 + Math.sin(now * 0.022 + fl.cone.position.x) * 0.22;
       }
+
 
       setNearby(near);
 
@@ -2027,7 +2323,9 @@ export default function AnthemGame() {
               <div><span className="text-[#e8dcc0]">Shift</span> — run</div>
               <div><span className="text-[#e8dcc0]">Space</span> — jump</div>
               <div><span className="text-[#e8dcc0]">Mouse</span> — look</div>
+              <div><span className="text-[#e8dcc0]">Ctrl / C</span> — crouch</div>
               <div><span className="text-[#e8dcc0]">E</span> — interact / enter / exit</div>
+
             </div>
             <button
               onClick={() => setStarted(true)}
@@ -2053,8 +2351,37 @@ export default function AnthemGame() {
                 {hasLantern ? "🏮 Lantern" : "○ No lantern"}
               </span>
               <span className="text-[#e8c870]">✦ Fragments {fragments}/5</span>
+              <span className="text-[#c8e870]">✿ Flowers {flowers}/3</span>
             </div>
           </div>
+
+          {/* Compass */}
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 pointer-events-none">
+            <div className="relative w-64 h-8 border border-[#c8a84a]/40 bg-black/50 overflow-hidden">
+              <div
+                className="absolute inset-y-0 flex items-center text-[10px] uppercase tracking-[0.4em] text-[#e8dcc0]"
+                style={{ left: `${(((-compass.yaw / (Math.PI * 2)) % 1 + 1) % 1) * 100 - 50}%`, width: '400%' }}
+              >
+                <span className="w-1/8 text-center" style={{ width: '12.5%' }}>N</span>
+                <span className="w-1/8 text-center" style={{ width: '12.5%' }}>NE</span>
+                <span className="w-1/8 text-center" style={{ width: '12.5%' }}>E</span>
+                <span className="w-1/8 text-center" style={{ width: '12.5%' }}>SE</span>
+                <span className="w-1/8 text-center" style={{ width: '12.5%' }}>S</span>
+                <span className="w-1/8 text-center" style={{ width: '12.5%' }}>SW</span>
+                <span className="w-1/8 text-center" style={{ width: '12.5%' }}>W</span>
+                <span className="w-1/8 text-center" style={{ width: '12.5%' }}>NW</span>
+              </div>
+              <div className="absolute left-1/2 top-0 bottom-0 w-px bg-[#e8c870]" />
+            </div>
+          </div>
+
+          {/* Chase timer banner */}
+          {chase?.active && (
+            <div className="absolute top-16 left-1/2 -translate-x-1/2 z-20 px-4 py-2 border border-red-600 bg-black/70 text-red-300 uppercase tracking-[0.3em] text-xs animate-pulse">
+              ⚠ Guards pursuing · {Math.ceil(chase.timeLeft)}s
+            </div>
+          )}
+
           <div className="absolute top-4 right-4 z-10 text-right text-xs uppercase tracking-widest text-[#8a7a5a]">
             <div className="pointer-events-none">WASD · Mouse · E</div>
             <div className="text-[#6a5a40] normal-case tracking-normal pt-1 pointer-events-none">Follow the beam of light</div>
