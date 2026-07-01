@@ -2139,8 +2139,10 @@ export default function AnthemGame() {
         }
       }
 
-      // Compass bearing — angle to next objective marker
-      // (updates HUD via a ref-mutated element to avoid React re-renders)
+      // Compass — throttled
+      if (frame % 6 === 0) setCompass({ yaw, targetAngle: null, label: null });
+
+
 
 
 
