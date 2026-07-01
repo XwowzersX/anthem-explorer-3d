@@ -1967,34 +1967,39 @@ export default function AnthemGame() {
       );
       if (!activeColliders.some(c => c.box.intersectsBox(bz))) camera.position.z += velocity.z;
 
-      // footstep cadence
+      // crouch — hold Ctrl or C
+      const crouching = !!(keys["ControlLeft"] || keys["ControlRight"] || keys["KeyC"]);
+      groundY = crouching ? CROUCH_Y : STAND_Y;
+      // footstep cadence — surface-based, quieter while crouched
       const horizSpeed = Math.hypot(velocity.x, velocity.z);
-      if (onGround && horizSpeed > 0.02) {
+      if (onGround && horizSpeed > 0.02 && !crouching) {
         stepAccum += horizSpeed;
         const cadence = (keys["ShiftLeft"] || keys["ShiftRight"]) ? 0.55 : 0.85;
         if (stepAccum > cadence) {
           stepAccum = 0;
-          sfx.footstep();
+          doFootstep();
         }
       } else {
         stepAccum = Math.max(0, stepAccum - dt);
       }
 
       // jump + gravity
-      if (keys["Space"] && onGround && !activeBeatRef.current && document.pointerLockElement === renderer.domElement) {
+      if (keys["Space"] && onGround && !crouching && !activeBeatRef.current && document.pointerLockElement === renderer.domElement) {
         vy = JUMP_V;
         onGround = false;
-        sfx.jump();
+        blip(320, 0.09, "sine", 0.14, 0.1); noiseBurst(0.08, 620, 5, 0.12, 0.08);
       }
       vy -= GRAVITY * dt;
       camera.position.y += vy * dt;
-      if (camera.position.y <= GROUND_Y) {
+      if (camera.position.y <= groundY) {
         const wasFalling = !onGround;
-        camera.position.y = GROUND_Y;
+        camera.position.y = groundY;
         vy = 0;
         if (wasFalling) sfx.land();
         onGround = true;
       }
+
+
 
 
       // bobs
