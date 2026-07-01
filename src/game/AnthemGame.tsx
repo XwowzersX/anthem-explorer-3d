@@ -696,7 +696,7 @@ export default function AnthemGame() {
     const lampGeo = new THREE.CylinderGeometry(0.08, 0.12, 4.5, 6);
     const flameGeo = new THREE.ConeGeometry(0.28, 0.7, 6);
     const flameCoreGeo = new THREE.ConeGeometry(0.14, 0.45, 6);
-    const flickerLamps: { light: THREE.PointLight | null; base: number; cone: THREE.Mesh; core: THREE.Mesh }[] = [];
+    const flickerLamps: { light: THREE.PointLight | null; base: number; cone: THREE.Mesh; core?: THREE.Mesh }[] = [];
     for (let k = -GRID; k <= GRID; k++) {
       if (k === 0) continue;
       for (const [lx, lz] of [[-5, k * 17], [5, k * 17], [k * 17, -5], [k * 17, 5]] as const) {
