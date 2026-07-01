@@ -1932,7 +1932,10 @@ export default function AnthemGame() {
 
       // bobs
       const t = now / 600;
-      lightBox.position.y = 1.15 + Math.sin(t) * 0.08;
+      lightBox.position.y = 1.68 + Math.sin(t) * 0.02;
+      filament.position.y = 1.68 + Math.sin(t) * 0.02;
+      lbLight.intensity = 3.4 + Math.sin(t * 3) * 0.2 + (Math.random() - 0.5) * 0.15;
+
       lightBox.rotation.y += dt * 0.6;
       bookGroup.position.y = 1.5 + Math.sin(t * 0.8) * 0.07;
       bookGroup.rotation.y += dt * 0.3;
