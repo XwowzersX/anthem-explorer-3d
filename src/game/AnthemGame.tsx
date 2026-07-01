@@ -876,6 +876,49 @@ export default function AnthemGame() {
     forestMarker.position.y = 0.15;
 
     // =====================================================================
+    // WORLD BORDER — ring of trees + invisible wall + heavy outer fog
+    // =====================================================================
+    // A big ring at radius ~460 so the surface world stops feeling infinite.
+    const BORDER_R = 460;
+    for (let a = 0; a < Math.PI * 2; a += 0.05) {
+      const bx = Math.cos(a) * BORDER_R;
+      const bz = Math.sin(a) * BORDER_R;
+      // Skip if too close to forest region (already has trees)
+      if (bx < -140 && Math.abs(bz) < 240) continue;
+      const trunk = new THREE.Mesh(trunkGeo, M.trunk);
+      trunk.position.set(bx, 4.5, bz);
+      sceneAdd("surface", trunk);
+      const top = new THREE.Mesh(topGeo, M.leaves);
+      top.position.set(bx, 11, bz);
+      sceneAdd("surface", top);
+    }
+    // A second inner ring so it reads as a wall of woods
+    for (let a = 0.025; a < Math.PI * 2; a += 0.06) {
+      const r = BORDER_R - 12;
+      const bx = Math.cos(a) * r, bz = Math.sin(a) * r;
+      if (bx < -140 && Math.abs(bz) < 240) continue;
+      const trunk = new THREE.Mesh(trunkGeo, M.trunk);
+      trunk.position.set(bx, 4.5, bz);
+      sceneAdd("surface", trunk);
+      const top = new THREE.Mesh(topGeo, M.leaves);
+      top.position.set(bx, 11, bz);
+      sceneAdd("surface", top);
+    }
+    // Hard invisible wall at radius BORDER_R + 4 — implemented as segmented boxes
+    for (let a = 0; a < Math.PI * 2; a += 0.2) {
+      const r = BORDER_R + 6;
+      const bx = Math.cos(a) * r, bz = Math.sin(a) * r;
+      const box = new THREE.Box3(
+        new THREE.Vector3(bx - 20, 0, bz - 20),
+        new THREE.Vector3(bx + 20, 30, bz + 20),
+      );
+      // Only add walls that don't cover playable area (skip anything inside r-30)
+      if (Math.hypot(bx, bz) > BORDER_R) colliderSets.surface.push({ box });
+    }
+
+
+
+    // =====================================================================
     // SURFACE — GLASS HOUSE EXTERIOR
     // =====================================================================
     const HX = -420, HZ = 0;
