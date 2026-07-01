@@ -2347,8 +2347,37 @@ export default function AnthemGame() {
                 {hasLantern ? "🏮 Lantern" : "○ No lantern"}
               </span>
               <span className="text-[#e8c870]">✦ Fragments {fragments}/5</span>
+              <span className="text-[#c8e870]">✿ Flowers {flowers}/3</span>
             </div>
           </div>
+
+          {/* Compass */}
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 pointer-events-none">
+            <div className="relative w-64 h-8 border border-[#c8a84a]/40 bg-black/50 overflow-hidden">
+              <div
+                className="absolute inset-y-0 flex items-center text-[10px] uppercase tracking-[0.4em] text-[#e8dcc0]"
+                style={{ left: `${(((-compass.yaw / (Math.PI * 2)) % 1 + 1) % 1) * 100 - 50}%`, width: '400%' }}
+              >
+                <span className="w-1/8 text-center" style={{ width: '12.5%' }}>N</span>
+                <span className="w-1/8 text-center" style={{ width: '12.5%' }}>NE</span>
+                <span className="w-1/8 text-center" style={{ width: '12.5%' }}>E</span>
+                <span className="w-1/8 text-center" style={{ width: '12.5%' }}>SE</span>
+                <span className="w-1/8 text-center" style={{ width: '12.5%' }}>S</span>
+                <span className="w-1/8 text-center" style={{ width: '12.5%' }}>SW</span>
+                <span className="w-1/8 text-center" style={{ width: '12.5%' }}>W</span>
+                <span className="w-1/8 text-center" style={{ width: '12.5%' }}>NW</span>
+              </div>
+              <div className="absolute left-1/2 top-0 bottom-0 w-px bg-[#e8c870]" />
+            </div>
+          </div>
+
+          {/* Chase timer banner */}
+          {chase?.active && (
+            <div className="absolute top-16 left-1/2 -translate-x-1/2 z-20 px-4 py-2 border border-red-600 bg-black/70 text-red-300 uppercase tracking-[0.3em] text-xs animate-pulse">
+              ⚠ Guards pursuing · {Math.ceil(chase.timeLeft)}s
+            </div>
+          )}
+
           <div className="absolute top-4 right-4 z-10 text-right text-xs uppercase tracking-widest text-[#8a7a5a]">
             <div className="pointer-events-none">WASD · Mouse · E</div>
             <div className="text-[#6a5a40] normal-case tracking-normal pt-1 pointer-events-none">Follow the beam of light</div>
