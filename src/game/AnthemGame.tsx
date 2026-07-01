@@ -1109,17 +1109,50 @@ export default function AnthemGame() {
     // east/west walls solid
     addBox("underground", CHX + CHS / 2, 0, CHZ, 0.4, JH, CHS, M.tunnelWall);
     addBox("underground", CHX - CHS / 2, 0, CHZ, 0.4, JH, CHS, M.tunnelWall);
-    // Altar and the glass light box
-    const lbAltar = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.7, 1.6), M.altar);
-    lbAltar.position.set(CHX, 0.35, CHZ - 2);
+    // Altar — a wooden workbench with the invention on top
+    const lbAltar = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.9, 1.8), M.altar);
+    lbAltar.position.set(CHX, 0.45, CHZ - 2);
     sceneAdd("underground", lbAltar);
-    const lightBox = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.9, 0.7),
-      new THREE.MeshStandardMaterial({ color: 0xfff8dd, emissive: 0xfff0aa, emissiveIntensity: 2.0 }));
-    lightBox.position.set(CHX, 1.15, CHZ - 2);
+    // Wooden base for the bulb (like a physics prof's apparatus)
+    const bulbBase = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.25, 0.8),
+      new THREE.MeshStandardMaterial({ color: 0x3a2818, map: T.wood, roughness: 0.9 }));
+    bulbBase.position.set(CHX, 1.0, CHZ - 2);
+    sceneAdd("underground", bulbBase);
+    // Brass socket
+    const socket = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.18, 0.35, 12),
+      new THREE.MeshStandardMaterial({ color: 0xb08838, metalness: 0.85, roughness: 0.3 }));
+    socket.position.set(CHX, 1.32, CHZ - 2);
+    sceneAdd("underground", socket);
+    // Glass bulb (the "light without fire")
+    const lightBox = new THREE.Mesh(new THREE.SphereGeometry(0.28, 20, 16),
+      new THREE.MeshStandardMaterial({
+        color: 0xfff8dd, emissive: 0xfff0aa, emissiveIntensity: 2.2,
+        transparent: true, opacity: 0.85, roughness: 0.1, metalness: 0.1,
+      }));
+    lightBox.position.set(CHX, 1.68, CHZ - 2);
     sceneAdd("underground", lightBox);
-    const lbLight = new THREE.PointLight(0xffeeaa, 3, 35);
-    lbLight.position.set(CHX, 2.5, CHZ - 2);
+    // Filament (thin bright wire loop)
+    const filament = new THREE.Mesh(new THREE.TorusGeometry(0.09, 0.008, 6, 16),
+      new THREE.MeshBasicMaterial({ color: 0xfff4c0 }));
+    filament.position.set(CHX, 1.68, CHZ - 2);
+    filament.rotation.x = Math.PI / 2;
+    sceneAdd("underground", filament);
+    // Copper wires trailing from base to a small battery/jar
+    const jar = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.5, 10),
+      new THREE.MeshStandardMaterial({ color: 0x8a9aa8, metalness: 0.7, roughness: 0.3, transparent: true, opacity: 0.6 }));
+    jar.position.set(CHX + 0.7, 1.15, CHZ - 2);
+    sceneAdd("underground", jar);
+    for (let w = 0; w < 2; w++) {
+      const wire = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.7, 6),
+        new THREE.MeshStandardMaterial({ color: 0xb87a3a, metalness: 0.8, roughness: 0.4 }));
+      wire.position.set(CHX + 0.35, 1.15 + (w === 0 ? 0.15 : -0.05), CHZ - 2);
+      wire.rotation.z = Math.PI / 2;
+      sceneAdd("underground", wire);
+    }
+    const lbLight = new THREE.PointLight(0xffeeaa, 3.5, 40);
+    lbLight.position.set(CHX, 2.4, CHZ - 2);
     sceneAdd("underground", lbLight);
+
 
     // Stair pad back to the surface — placed in the junction
     const stair = new THREE.Mesh(new THREE.BoxGeometry(3, 0.25, 3), M.exitPad);
