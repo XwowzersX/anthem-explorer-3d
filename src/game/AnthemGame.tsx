@@ -169,7 +169,7 @@ export default function AnthemGame() {
       return t;
     };
     scene.background = makeSky();
-    scene.fog = new THREE.Fog(0x4a4858, 90, 520);
+    scene.fog = new THREE.Fog(0x3a3848, 60, 380);
 
     const camera = new THREE.PerspectiveCamera(74, mount.clientWidth / mount.clientHeight, 0.05, 900);
 
