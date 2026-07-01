@@ -2323,7 +2323,9 @@ export default function AnthemGame() {
               <div><span className="text-[#e8dcc0]">Shift</span> — run</div>
               <div><span className="text-[#e8dcc0]">Space</span> — jump</div>
               <div><span className="text-[#e8dcc0]">Mouse</span> — look</div>
+              <div><span className="text-[#e8dcc0]">Ctrl / C</span> — crouch</div>
               <div><span className="text-[#e8dcc0]">E</span> — interact / enter / exit</div>
+
             </div>
             <button
               onClick={() => setStarted(true)}
