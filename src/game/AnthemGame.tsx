@@ -1892,8 +1892,32 @@ export default function AnthemGame() {
     let onGround = true;
     const GRAVITY = 22;
     const JUMP_V = 8;
-    const GROUND_Y = 1.7;
+    const STAND_Y = 1.7;
+    const CROUCH_Y = 1.05;
+    let groundY = STAND_Y;
     let stepAccum = 0;
+
+    // Chase-scene state
+    const chaseState = { active: false, timeLeft: 0, guards: [] as { mesh: THREE.Group; pos: THREE.Vector3 }[] };
+    const councilCutscene = { active: false, step: 0, timer: 0 };
+    // Surface-material footstep pickers
+    const surfaceKind = (): "cobble" | "grass" | "wood" | "stone" | "dirt" => {
+      if (currentScene === "dorm" || currentScene === "house") return "wood";
+      if (currentScene === "underground" || currentScene === "council") return "stone";
+      // surface: grass in field/forest, cobble in city
+      const p = camera.position; const lz = p.z, lx = p.x;
+      if (lz > 150) return "grass"; // field
+      if (lx < -140) return "grass"; // forest
+      return "cobble";
+    };
+    const doFootstep = () => {
+      const k = surfaceKind();
+      if (k === "grass") noiseBurst(0.12, 380, 3, 0.16, 0.05);
+      else if (k === "wood") { noiseBurst(0.09, 260, 6, 0.19, 0.08); blip(140, 0.06, "sine", 0.09, 0.05); }
+      else if (k === "stone") noiseBurst(0.08, 500, 10, 0.18, 0.35);
+      else /* cobble */ noiseBurst(0.09, 340, 9, 0.2, 0.15);
+    };
+
 
 
 
