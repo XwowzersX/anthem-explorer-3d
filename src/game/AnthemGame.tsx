@@ -692,11 +692,11 @@ export default function AnthemGame() {
       }
     }
 
-    // Fire-burning street lamps along boulevards
+    // Fire-burning street lamps along boulevards — every lamp animated
     const lampGeo = new THREE.CylinderGeometry(0.08, 0.12, 4.5, 6);
     const flameGeo = new THREE.ConeGeometry(0.28, 0.7, 6);
     const flameCoreGeo = new THREE.ConeGeometry(0.14, 0.45, 6);
-    const flickerLamps: { light: THREE.PointLight; base: number; cone: THREE.Mesh }[] = [];
+    const flickerLamps: { light: THREE.PointLight | null; base: number; cone: THREE.Mesh; core: THREE.Mesh }[] = [];
     for (let k = -GRID; k <= GRID; k++) {
       if (k === 0) continue;
       for (const [lx, lz] of [[-5, k * 17], [5, k * 17], [k * 17, -5], [k * 17, 5]] as const) {
@@ -712,15 +712,18 @@ export default function AnthemGame() {
         const core = new THREE.Mesh(flameCoreGeo, M.flameCore);
         core.position.set(lx, 4.95, lz);
         sceneAdd("surface", core);
-        // every third lamp gets a real flickering light (perf)
-        if ((Math.abs(k) + (lx > 0 ? 0 : 1)) % 3 === 0) {
-          const pl = new THREE.PointLight(0xff8030, 1.4, 18);
+        // real PointLight only on every 3rd (perf), but ALL flames animate
+        const hasLight = (Math.abs(k) + (lx > 0 ? 0 : 1)) % 3 === 0;
+        let pl: THREE.PointLight | null = null;
+        if (hasLight) {
+          pl = new THREE.PointLight(0xff8030, 1.4, 18);
           pl.position.set(lx, 5.2, lz);
           sceneAdd("surface", pl);
-          flickerLamps.push({ light: pl, base: 1.4, cone: flame });
         }
+        flickerLamps.push({ light: pl, base: 1.4, cone: flame, core });
       }
     }
+
     // Central plaza fire — bigger, real light
     const fire = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.4, 0.6, 12), M.fire);
     fire.position.set(0, 0.3, 0);
