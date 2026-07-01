@@ -1255,6 +1255,27 @@ export default function AnthemGame() {
     sceneAdd("council", councilExit);
     addBox("council", 0, 0, C_D / 2 - 0.3, 6, 9, 0.4, M.doorWood, false);
 
+    // Five Council scholars seated behind the table (cutscene actors)
+    const councilBoard: { mesh: THREE.Group; pos: THREE.Vector3; name: string }[] = [];
+    const councilNames = ["World Scholar 1-8100", "Scholar Collective 1-1998", "Judge 2-5991", "Council 8-4111", "Scholar 3-0090"];
+    for (let i = -2; i <= 2; i++) {
+      const g = new THREE.Group();
+      const robe = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.6, 2.0, 10),
+        new THREE.MeshStandardMaterial({ color: 0x2a2018, roughness: 0.95 }));
+      robe.position.y = 1.0; g.add(robe);
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.32, 12, 10),
+        new THREE.MeshStandardMaterial({ color: 0xe8c8a8, roughness: 0.8 }));
+      head.position.y = 2.25; g.add(head);
+      const hood = new THREE.Mesh(new THREE.ConeGeometry(0.42, 0.7, 8),
+        new THREE.MeshStandardMaterial({ color: 0x1a1410, roughness: 0.9 }));
+      hood.position.y = 2.55; g.add(hood);
+      g.position.set(i * 3.4, 0, -C_D / 2 + 3);
+      g.rotation.y = Math.PI; // face south toward player
+      sceneAdd("council", g);
+      councilBoard.push({ mesh: g, pos: new THREE.Vector3(i * 3.4, 1, -C_D / 2 + 3), name: councilNames[i + 2] });
+    }
+
+
     // =====================================================================
     // INTERIOR — GLASS HOUSE (period: rugs, books, mirrors)
     // =====================================================================
