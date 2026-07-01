@@ -1706,7 +1706,7 @@ export default function AnthemGame() {
           if (pk.kind === "lantern") {
             hasLanternRef.current = true;
             setHasLantern(true);
-            carriedLantern.intensity = 2.2;
+            carriedLantern.intensity = 3.5; lanternSpot.intensity = 6.5;
           } else {
             fragmentsRef.current += 1;
             setFragments(fragmentsRef.current);
