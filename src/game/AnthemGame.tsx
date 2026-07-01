@@ -767,11 +767,19 @@ export default function AnthemGame() {
     let grateSlideT = 0;
 
     // =====================================================================
-    // SURFACE — FIELD (south, beyond a low wall with a gap at center)
+    // SURFACE — FIELD (fully fenced, only opens through the south wall gap)
     // =====================================================================
     for (let x = -140; x <= 140; x += 5) {
       if (Math.abs(x) < 5) continue;
       addBox("surface", x, 0, 150, 4.5, 2.4, 1.2, M.plasterDark);
+    }
+    // wheat field perimeter fence — east, west, and far south sides
+    for (let z = 152; z <= 388; z += 4) {
+      addBox("surface", -140, 0, z, 0.4, 1.6, 4, M.woodDark);
+      addBox("surface", 140, 0, z, 0.4, 1.6, 4, M.woodDark);
+    }
+    for (let x = -140; x <= 140; x += 4) {
+      addBox("surface", x, 0, 388, 4, 1.6, 0.4, M.woodDark);
     }
     const fieldMesh = new THREE.Mesh(new THREE.PlaneGeometry(340, 240), M.grass);
     fieldMesh.rotation.x = -Math.PI / 2;
@@ -783,6 +791,18 @@ export default function AnthemGame() {
       tuft.position.set((rand() - 0.5) * 320, 0.65, 170 + rand() * 200);
       sceneAdd("surface", tuft);
     }
+    // Three wildflowers scattered in the field — the puzzle
+    const flowerMat = new THREE.MeshStandardMaterial({ color: 0xffe0f0, emissive: 0xff80c0, emissiveIntensity: 1.4, roughness: 0.5 });
+    const flowerMeshes: THREE.Mesh[] = [];
+    const flowerPositions: [number, number][] = [[-60, 210], [40, 320], [90, 260]];
+    for (const [fx, fz] of flowerPositions) {
+      const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 1.0, 5), M.tuft);
+      stem.position.set(fx, 0.5, fz); sceneAdd("surface", stem);
+      const petals = new THREE.Mesh(new THREE.SphereGeometry(0.22, 8, 6), flowerMat);
+      petals.position.set(fx, 1.05, fz); sceneAdd("surface", petals);
+      flowerMeshes.push(petals);
+    }
+
     // Liberty 5-3000
     const liberty = new THREE.Group();
     const body = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.45, 1.7, 10),
