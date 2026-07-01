@@ -1496,9 +1496,18 @@ export default function AnthemGame() {
     // =====================================================================
     // PLAYER-CARRIED LANTERN — point light parented to camera
     // =====================================================================
-    const carriedLantern = new THREE.PointLight(0xffb070, 0.0, 22);
-    carriedLantern.position.set(0.4, -0.2, -0.3);
+    // PLAYER LANTERN — bright omni + forward SpotLight cone so it lights the world
+    const carriedLantern = new THREE.PointLight(0xffc080, 0.0, 55, 1.3);
+    carriedLantern.position.set(0.4, -0.2, -0.2);
     camera.add(carriedLantern);
+    const lanternSpot = new THREE.SpotLight(0xffd08a, 0.0, 60, Math.PI / 3.2, 0.55, 1.2);
+    lanternSpot.position.set(0.3, -0.1, -0.2);
+    const spotTarget = new THREE.Object3D();
+    spotTarget.position.set(0.3, -0.1, -20);
+    camera.add(spotTarget);
+    lanternSpot.target = spotTarget;
+    camera.add(lanternSpot);
+
     scene.add(camera); // camera must be in scene graph for its children to render
 
 
