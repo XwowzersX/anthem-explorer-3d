@@ -1964,6 +1964,18 @@ export default function AnthemGame() {
         if (d < bestD) { bestD = d; best = it; }
       }
       if (best) {
+        // Puzzle gate: Golden One requires all 3 flowers
+        if (best.beatId === "field_meet" && flowersRef.current < 3) {
+          setNpcLine({ name: "Golden One", line: `Bring me a token of the earth — three wildflowers from the field. (${flowersRef.current}/3)` });
+          return;
+        }
+        // Council: run the cutscene instead of instant-advance
+        if (best.beatId === "council" && !councilCutscene.active) {
+          councilCutscene.active = true;
+          cutsceneIdx = 0;
+          advanceCouncilCutscene();
+          return;
+        }
         const beat = STORY.find(b => b.id === best!.beatId)!;
         setActiveBeat(beat); activeBeatRef.current = beat;
         sfx.interact();
@@ -1971,6 +1983,7 @@ export default function AnthemGame() {
         advanceTo(best.order + 1);
       }
     };
+
 
 
     // =====================================================================
