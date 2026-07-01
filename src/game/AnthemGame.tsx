@@ -121,13 +121,18 @@ export default function AnthemGame() {
   const [muted, setMuted] = useState(false);
   const [hasLantern, setHasLantern] = useState(false);
   const [fragments, setFragments] = useState(0);
+  const [flowers, setFlowers] = useState(0);
   const [npcLine, setNpcLine] = useState<{ name: string; line: string } | null>(null);
+  const [compass, setCompass] = useState<{ yaw: number; targetAngle: number | null; label: string | null }>({ yaw: 0, targetAngle: null, label: null });
+  const [chase, setChase] = useState<{ active: boolean; timeLeft: number } | null>(null);
   const mutedRef = useRef(false);
   const masterGainRef = useRef<GainNode | null>(null);
   const hasLanternRef = useRef(false);
   const fragmentsRef = useRef(0);
+  const flowersRef = useRef(0);
   const npcLineRef = useRef<{ name: string; line: string } | null>(null);
   useEffect(() => { npcLineRef.current = npcLine; }, [npcLine]);
+
   useEffect(() => {
     mutedRef.current = muted;
     const g = masterGainRef.current;
