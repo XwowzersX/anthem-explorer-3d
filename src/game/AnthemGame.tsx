@@ -1977,9 +1977,11 @@ export default function AnthemGame() {
       }
       // flicker fire lamps (cheap — small array)
       for (const fl of flickerLamps) {
-        fl.light.intensity = fl.base + Math.sin(now * 0.013 + fl.light.position.x) * 0.15 + (Math.random() - 0.5) * 0.18;
-        fl.cone.scale.y = 1 + Math.sin(now * 0.018 + fl.light.position.z) * 0.12;
+        if (fl.light) fl.light.intensity = fl.base + Math.sin(now * 0.013 + fl.light.position.x) * 0.15 + (Math.random() - 0.5) * 0.18;
+        fl.cone.scale.y = 1 + Math.sin(now * 0.018 + fl.cone.position.z + fl.cone.position.x) * 0.18;
+        if (fl.core) fl.core.scale.y = 1 + Math.sin(now * 0.022 + fl.cone.position.x) * 0.22;
       }
+
 
       setNearby(near);
 
