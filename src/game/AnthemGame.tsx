@@ -1836,9 +1836,31 @@ export default function AnthemGame() {
         activeBeatRef.current = null;
         return;
       }
+      // If council cutscene is running, E advances lines
+      if (councilCutscene.active) {
+        advanceCouncilCutscene();
+        return;
+      }
       if (npcLineRef.current) { npcLineRef.current = null; setNpcLine(null); return; }
       const p = camera.position;
       const localP = new THREE.Vector3(p.x - SCENE_OFFSETS[currentScene], p.y, p.z);
+
+      // FLOWERS — pluck in field
+      if (currentScene === "surface" && progressRef.current === 2) {
+        for (let i = 0; i < flowerMeshes.length; i++) {
+          const fm = flowerMeshes[i];
+          if (!fm.visible) continue;
+          if (localP.distanceTo(fm.position) < 2.0) {
+            fm.visible = false;
+            flowersRef.current += 1;
+            setFlowers(flowersRef.current);
+            sfx.interact();
+            setNpcLine({ name: "—", line: `You pluck a wildflower. (${flowersRef.current}/3) — offer them to the Golden One.` });
+            return;
+          }
+        }
+      }
+
 
       // PICKUPS first — they're small and easy to miss
       for (const pk of pickups) {
