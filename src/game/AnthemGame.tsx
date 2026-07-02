@@ -2033,9 +2033,9 @@ export default function AnthemGame() {
         if (d < bestD) { bestD = d; best = it; }
       }
       if (best) {
-        // Puzzle gate: Golden One requires all 3 flowers
-        if (best.beatId === "field_meet" && flowersRef.current < 3) {
-          setNpcLine({ name: "Golden One", line: `Bring me a token of the earth — three wildflowers from the field. (${flowersRef.current}/3)` });
+        // Puzzle gate: Golden One requires the garden gate to be open first
+        if (best.beatId === "field_meet" && !gatePuzzle.solved) {
+          setNpcLine({ name: "—", line: "The garden gate is sealed. Light the pedestals in order — shortest to tallest." });
           return;
         }
         // Council: run the cutscene instead of instant-advance
