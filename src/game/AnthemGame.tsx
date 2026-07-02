@@ -790,17 +790,62 @@ export default function AnthemGame() {
       tuft.position.set((rand() - 0.5) * 320, 0.65, 170 + rand() * 200);
       sceneAdd("surface", tuft);
     }
-    // Three wildflowers scattered in the field — the puzzle
-    const flowerMat = new THREE.MeshStandardMaterial({ color: 0xffe0f0, emissive: 0xff80c0, emissiveIntensity: 1.4, roughness: 0.5 });
-    const flowerMeshes: THREE.Mesh[] = [];
-    const flowerPositions: [number, number][] = [[-60, 210], [40, 320], [90, 260]];
-    for (const [fx, fz] of flowerPositions) {
-      const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 1.0, 5), M.tuft);
-      stem.position.set(fx, 0.5, fz); sceneAdd("surface", stem);
-      const petals = new THREE.Mesh(new THREE.SphereGeometry(0.22, 8, 6), flowerMat);
-      petals.position.set(fx, 1.05, fz); sceneAdd("surface", petals);
-      flowerMeshes.push(petals);
+    // ----- GARDEN GATE PUZZLE -----
+    // A stone wall closes off the field. Three pedestals of ascending height
+    // stand before it. Press E on them shortest→tallest to open the gate.
+    // (Clue scroll pinned to the wall.)
+    const GATE_Z = 200;
+    const stoneWallMat = new THREE.MeshStandardMaterial({ color: 0x5a5348, roughness: 0.95, metalness: 0.02 });
+    addBox("surface", -75, 0, GATE_Z, 130, 4, 0.8, stoneWallMat);
+    addBox("surface",  75, 0, GATE_Z, 130, 4, 0.8, stoneWallMat);
+    // Gate posts
+    addBox("surface", -8, 0, GATE_Z, 1.2, 5.2, 1.2, M.pillarDark);
+    addBox("surface",  8, 0, GATE_Z, 1.2, 5.2, 1.2, M.pillarDark);
+    // Lintel
+    addBox("surface", 0, 0, GATE_Z, 18, 0.8, 0.8, M.woodDark);
+    // Gate itself — a wooden portcullis that slides up when solved
+    const gateMesh = new THREE.Mesh(new THREE.BoxGeometry(15, 4, 0.4),
+      new THREE.MeshStandardMaterial({ color: 0x3a2618, roughness: 0.85, metalness: 0.1 }));
+    gateMesh.position.set(0, 2, GATE_Z);
+    sceneAdd("surface", gateMesh);
+    const gateCollider = { box: new THREE.Box3().setFromCenterAndSize(
+      new THREE.Vector3(0, 2, GATE_Z), new THREE.Vector3(15, 4, 0.6)) };
+    // We'll register this collider once colliders list exists; store for later
+    const gatePuzzle = {
+      mesh: gateMesh,
+      collider: gateCollider,
+      open: false,
+      order: [] as number[],
+      solved: false,
+    };
+    // Three pedestals in front of the gate, arranged so heights are NOT in
+    // spatial order — the player must read the world.
+    const pedHeights = [0.9, 1.6, 1.25]; // indices 0,1,2 — correct order shortest→tallest = 0,2,1
+    const pedPositions: Array<[number, number]> = [[-9, 210], [4, 214], [10, 208]];
+    const pedestals: Array<{ idx: number; base: THREE.Mesh; flame: THREE.Mesh; light: THREE.PointLight; lit: boolean; pos: THREE.Vector3 }> = [];
+    for (let i = 0; i < 3; i++) {
+      const [px, pz] = pedPositions[i];
+      const h = pedHeights[i];
+      const base = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.7, h, 12),
+        new THREE.MeshStandardMaterial({ color: 0x6a6055, roughness: 0.95, map: T.stone }));
+      base.position.set(px, h / 2, pz);
+      sceneAdd("surface", base);
+      // Rune on top — a Roman-numeral-ish rectangle groove
+      const rune = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.02, 0.05 + i * 0.08),
+        new THREE.MeshStandardMaterial({ color: 0x1a1410, emissive: 0x000000 }));
+      rune.position.set(px, h + 0.02, pz);
+      sceneAdd("surface", rune);
+      // Unlit flame bowl
+      const flame = new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.5, 8),
+        new THREE.MeshStandardMaterial({ color: 0x1a120a, emissive: 0xff8020, emissiveIntensity: 0 }));
+      flame.position.set(px, h + 0.32, pz);
+      sceneAdd("surface", flame);
+      const pl = new THREE.PointLight(0xffa050, 0, 8, 2);
+      pl.position.set(px, h + 0.5, pz);
+      sceneAdd("surface", pl);
+      pedestals.push({ idx: i, base, flame, light: pl, lit: false, pos: new THREE.Vector3(px, h + 0.3, pz) });
     }
+    const correctOrder = [0, 2, 1]; // sorted by ascending height
 
     // Liberty 5-3000
     const liberty = new THREE.Group();
