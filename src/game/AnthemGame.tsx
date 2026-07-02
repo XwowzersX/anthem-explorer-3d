@@ -2208,8 +2208,17 @@ export default function AnthemGame() {
         }
       }
 
-      // Compass — throttled
-      if (frame % 6 === 0) setCompass({ yaw, targetAngle: null, label: null });
+      // Compass — direct DOM update every frame (no React re-render)
+      if (compassRibbonRef.current) {
+        let tx = 96 + (256 * yaw) / Math.PI;
+        tx = ((tx % 512) + 512) % 512 - 512;
+        compassRibbonRef.current.style.transform = `translateX(${tx}px)`;
+      }
+
+      // Garden gate rising animation
+      if (gatePuzzle.solved && gatePuzzle.mesh.position.y < 6.5) {
+        gatePuzzle.mesh.position.y = Math.min(6.5, gatePuzzle.mesh.position.y + dt * 1.2);
+      }
 
 
 
