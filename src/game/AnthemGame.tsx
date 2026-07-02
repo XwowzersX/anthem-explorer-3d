@@ -810,7 +810,7 @@ export default function AnthemGame() {
     sceneAdd("surface", gateMesh);
     const gateCollider = { box: new THREE.Box3().setFromCenterAndSize(
       new THREE.Vector3(0, 2, GATE_Z), new THREE.Vector3(15, 4, 0.6)) };
-    // We'll register this collider once colliders list exists; store for later
+    colliderSets.surface.push(gateCollider);
     const gatePuzzle = {
       mesh: gateMesh,
       collider: gateCollider,
