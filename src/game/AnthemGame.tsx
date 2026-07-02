@@ -121,16 +121,15 @@ export default function AnthemGame() {
   const [muted, setMuted] = useState(false);
   const [hasLantern, setHasLantern] = useState(false);
   const [fragments, setFragments] = useState(0);
-  const [flowers, setFlowers] = useState(0);
+  const [puzzleProgress, setPuzzleProgress] = useState(0); // 0..3 for garden pedestals
   const [npcLine, setNpcLine] = useState<{ name: string; line: string } | null>(null);
-  const [compass, setCompass] = useState<{ yaw: number; targetAngle: number | null; label: string | null }>({ yaw: 0, targetAngle: null, label: null });
   const [chase, setChase] = useState<{ active: boolean; timeLeft: number } | null>(null);
   const mutedRef = useRef(false);
   const masterGainRef = useRef<GainNode | null>(null);
   const hasLanternRef = useRef(false);
   const fragmentsRef = useRef(0);
-  const flowersRef = useRef(0);
   const npcLineRef = useRef<{ name: string; line: string } | null>(null);
+  const compassRibbonRef = useRef<HTMLDivElement>(null);
   useEffect(() => { npcLineRef.current = npcLine; }, [npcLine]);
 
   useEffect(() => {
@@ -179,7 +178,7 @@ export default function AnthemGame() {
     renderer.shadowMap.enabled = false; // perf: shadows were the biggest cost
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.15;
+    renderer.toneMappingExposure = 1.28;
     mount.appendChild(renderer.domElement);
 
     // =====================================================================
@@ -791,17 +790,62 @@ export default function AnthemGame() {
       tuft.position.set((rand() - 0.5) * 320, 0.65, 170 + rand() * 200);
       sceneAdd("surface", tuft);
     }
-    // Three wildflowers scattered in the field — the puzzle
-    const flowerMat = new THREE.MeshStandardMaterial({ color: 0xffe0f0, emissive: 0xff80c0, emissiveIntensity: 1.4, roughness: 0.5 });
-    const flowerMeshes: THREE.Mesh[] = [];
-    const flowerPositions: [number, number][] = [[-60, 210], [40, 320], [90, 260]];
-    for (const [fx, fz] of flowerPositions) {
-      const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 1.0, 5), M.tuft);
-      stem.position.set(fx, 0.5, fz); sceneAdd("surface", stem);
-      const petals = new THREE.Mesh(new THREE.SphereGeometry(0.22, 8, 6), flowerMat);
-      petals.position.set(fx, 1.05, fz); sceneAdd("surface", petals);
-      flowerMeshes.push(petals);
+    // ----- GARDEN GATE PUZZLE -----
+    // A stone wall closes off the field. Three pedestals of ascending height
+    // stand before it. Press E on them shortest→tallest to open the gate.
+    // (Clue scroll pinned to the wall.)
+    const GATE_Z = 200;
+    const stoneWallMat = new THREE.MeshStandardMaterial({ color: 0x5a5348, roughness: 0.95, metalness: 0.02 });
+    addBox("surface", -75, 0, GATE_Z, 130, 4, 0.8, stoneWallMat);
+    addBox("surface",  75, 0, GATE_Z, 130, 4, 0.8, stoneWallMat);
+    // Gate posts
+    addBox("surface", -8, 0, GATE_Z, 1.2, 5.2, 1.2, M.pillarDark);
+    addBox("surface",  8, 0, GATE_Z, 1.2, 5.2, 1.2, M.pillarDark);
+    // Lintel
+    addBox("surface", 0, 0, GATE_Z, 18, 0.8, 0.8, M.woodDark);
+    // Gate itself — a wooden portcullis that slides up when solved
+    const gateMesh = new THREE.Mesh(new THREE.BoxGeometry(15, 4, 0.4),
+      new THREE.MeshStandardMaterial({ color: 0x3a2618, roughness: 0.85, metalness: 0.1 }));
+    gateMesh.position.set(0, 2, GATE_Z);
+    sceneAdd("surface", gateMesh);
+    const gateCollider = { box: new THREE.Box3().setFromCenterAndSize(
+      new THREE.Vector3(0, 2, GATE_Z), new THREE.Vector3(15, 4, 0.6)) };
+    colliderSets.surface.push(gateCollider);
+    const gatePuzzle = {
+      mesh: gateMesh,
+      collider: gateCollider,
+      open: false,
+      order: [] as number[],
+      solved: false,
+    };
+    // Three pedestals in front of the gate, arranged so heights are NOT in
+    // spatial order — the player must read the world.
+    const pedHeights = [0.9, 1.6, 1.25]; // indices 0,1,2 — correct order shortest→tallest = 0,2,1
+    const pedPositions: Array<[number, number]> = [[-9, 210], [4, 214], [10, 208]];
+    const pedestals: Array<{ idx: number; base: THREE.Mesh; flame: THREE.Mesh; light: THREE.PointLight; lit: boolean; pos: THREE.Vector3 }> = [];
+    for (let i = 0; i < 3; i++) {
+      const [px, pz] = pedPositions[i];
+      const h = pedHeights[i];
+      const base = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.7, h, 12),
+        new THREE.MeshStandardMaterial({ color: 0x6a6055, roughness: 0.95, map: T.stone }));
+      base.position.set(px, h / 2, pz);
+      sceneAdd("surface", base);
+      // Rune on top — a Roman-numeral-ish rectangle groove
+      const rune = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.02, 0.05 + i * 0.08),
+        new THREE.MeshStandardMaterial({ color: 0x1a1410, emissive: 0x000000 }));
+      rune.position.set(px, h + 0.02, pz);
+      sceneAdd("surface", rune);
+      // Unlit flame bowl
+      const flame = new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.5, 8),
+        new THREE.MeshStandardMaterial({ color: 0x1a120a, emissive: 0xff8020, emissiveIntensity: 0 }));
+      flame.position.set(px, h + 0.32, pz);
+      sceneAdd("surface", flame);
+      const pl = new THREE.PointLight(0xffa050, 0, 8, 2);
+      pl.position.set(px, h + 0.5, pz);
+      sceneAdd("surface", pl);
+      pedestals.push({ idx: i, base, flame, light: pl, lit: false, pos: new THREE.Vector3(px, h + 0.3, pz) });
     }
+    const correctOrder = [0, 2, 1]; // sorted by ascending height
 
     // Liberty 5-3000
     const liberty = new THREE.Group();
@@ -1845,21 +1889,46 @@ export default function AnthemGame() {
       const p = camera.position;
       const localP = new THREE.Vector3(p.x - SCENE_OFFSETS[currentScene], p.y, p.z);
 
-      // FLOWERS — pluck in field
-      if (currentScene === "surface" && progressRef.current === 2) {
-        for (let i = 0; i < flowerMeshes.length; i++) {
-          const fm = flowerMeshes[i];
-          if (!fm.visible) continue;
-          if (localP.distanceTo(fm.position) < 2.0) {
-            fm.visible = false;
-            flowersRef.current += 1;
-            setFlowers(flowersRef.current);
-            sfx.interact();
-            setNpcLine({ name: "—", line: `You pluck a wildflower. (${flowersRef.current}/3) — offer them to the Golden One.` });
+      // GARDEN PEDESTAL PUZZLE — press E on pedestals shortest→tallest to open the gate
+      if (currentScene === "surface" && !gatePuzzle.solved) {
+        for (const ped of pedestals) {
+          if (ped.lit) continue;
+          if (localP.distanceTo(ped.pos) < 2.2) {
+            const expected = correctOrder[gatePuzzle.order.length];
+            if (ped.idx === expected) {
+              ped.lit = true;
+              (ped.flame.material as THREE.MeshStandardMaterial).emissiveIntensity = 3;
+              ped.light.intensity = 2.4;
+              gatePuzzle.order.push(ped.idx);
+              sfx.bell();
+              setPuzzleProgress(gatePuzzle.order.length);
+              if (gatePuzzle.order.length === correctOrder.length) {
+                gatePuzzle.solved = true;
+                setNpcLine({ name: "—", line: "The stones hum. The gate rises." });
+                // remove collider so player can pass
+                const idx = colliderSets.surface.indexOf(gatePuzzle.collider);
+                if (idx >= 0) colliderSets.surface.splice(idx, 1);
+              } else {
+                setNpcLine({ name: "—", line: `A flame answers. (${gatePuzzle.order.length}/3)` });
+              }
+            } else {
+              // reset
+              sfx.metal();
+              gatePuzzle.order.length = 0;
+              for (const p2 of pedestals) {
+                p2.lit = false;
+                (p2.flame.material as THREE.MeshStandardMaterial).emissiveIntensity = 0;
+                p2.light.intensity = 0;
+              }
+              setPuzzleProgress(0);
+              setNpcLine({ name: "—", line: "The flames die. The order was wrong. Read the world; try again." });
+            }
             return;
           }
         }
       }
+
+
 
 
       // PICKUPS first — they're small and easy to miss
@@ -1964,9 +2033,9 @@ export default function AnthemGame() {
         if (d < bestD) { bestD = d; best = it; }
       }
       if (best) {
-        // Puzzle gate: Golden One requires all 3 flowers
-        if (best.beatId === "field_meet" && flowersRef.current < 3) {
-          setNpcLine({ name: "Golden One", line: `Bring me a token of the earth — three wildflowers from the field. (${flowersRef.current}/3)` });
+        // Puzzle gate: Golden One requires the garden gate to be open first
+        if (best.beatId === "field_meet" && !gatePuzzle.solved) {
+          setNpcLine({ name: "—", line: "The garden gate is sealed. Light the pedestals in order — shortest to tallest." });
           return;
         }
         // Council: run the cutscene instead of instant-advance
@@ -2139,8 +2208,17 @@ export default function AnthemGame() {
         }
       }
 
-      // Compass — throttled
-      if (frame % 6 === 0) setCompass({ yaw, targetAngle: null, label: null });
+      // Compass — direct DOM update every frame (no React re-render)
+      if (compassRibbonRef.current) {
+        let tx = 96 + (256 * yaw) / Math.PI;
+        tx = ((tx % 512) + 512) % 512 - 512;
+        compassRibbonRef.current.style.transform = `translateX(${tx}px)`;
+      }
+
+      // Garden gate rising animation
+      if (gatePuzzle.solved && gatePuzzle.mesh.position.y < 6.5) {
+        gatePuzzle.mesh.position.y = Math.min(6.5, gatePuzzle.mesh.position.y + dt * 1.2);
+      }
 
 
 
@@ -2307,6 +2385,19 @@ export default function AnthemGame() {
     <div className="relative w-screen h-screen overflow-hidden bg-[#0e0c09] text-[#e8dcc0]">
       <div ref={mountRef} className="absolute inset-0" />
 
+      {/* Cinematic vignette + subtle warm color grade */}
+      {started && (
+        <div
+          className="pointer-events-none absolute inset-0 z-[5]"
+          style={{
+            background:
+              'radial-gradient(ellipse at center, rgba(0,0,0,0) 45%, rgba(0,0,0,0.55) 100%),' +
+              'linear-gradient(180deg, rgba(255,180,110,0.04) 0%, rgba(0,0,0,0) 30%, rgba(20,10,30,0.10) 100%)',
+            mixBlendMode: 'multiply',
+          }}
+        />
+      )}
+
       {!started && (
         <div className="absolute inset-0 z-20 flex items-center justify-center p-6 bg-[#0e0c09]/95">
           <div className="max-w-xl text-center space-y-6">
@@ -2351,27 +2442,25 @@ export default function AnthemGame() {
                 {hasLantern ? "🏮 Lantern" : "○ No lantern"}
               </span>
               <span className="text-[#e8c870]">✦ Fragments {fragments}/5</span>
-              <span className="text-[#c8e870]">✿ Flowers {flowers}/3</span>
+              <span className="text-[#c8e870]">✦ Pedestals {puzzleProgress}/3</span>
             </div>
           </div>
 
-          {/* Compass */}
+          {/* Compass — a translating ribbon with duplicated letters */}
           <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 pointer-events-none">
-            <div className="relative w-64 h-8 border border-[#c8a84a]/40 bg-black/50 overflow-hidden">
+            <div className="relative w-64 h-8 border border-[#c8a84a]/40 bg-black/60 overflow-hidden shadow-[0_0_12px_rgba(0,0,0,0.6)]">
               <div
-                className="absolute inset-y-0 flex items-center text-[10px] uppercase tracking-[0.4em] text-[#e8dcc0]"
-                style={{ left: `${(((-compass.yaw / (Math.PI * 2)) % 1 + 1) % 1) * 100 - 50}%`, width: '400%' }}
+                ref={compassRibbonRef}
+                className="absolute top-0 h-full flex items-center will-change-transform"
+                style={{ width: 1024, transform: 'translateX(96px)' }}
               >
-                <span className="w-1/8 text-center" style={{ width: '12.5%' }}>N</span>
-                <span className="w-1/8 text-center" style={{ width: '12.5%' }}>NE</span>
-                <span className="w-1/8 text-center" style={{ width: '12.5%' }}>E</span>
-                <span className="w-1/8 text-center" style={{ width: '12.5%' }}>SE</span>
-                <span className="w-1/8 text-center" style={{ width: '12.5%' }}>S</span>
-                <span className="w-1/8 text-center" style={{ width: '12.5%' }}>SW</span>
-                <span className="w-1/8 text-center" style={{ width: '12.5%' }}>W</span>
-                <span className="w-1/8 text-center" style={{ width: '12.5%' }}>NW</span>
+                {['N','NE','E','SE','S','SW','W','NW','N','NE','E','SE','S','SW','W','NW'].map((d, i) => (
+                  <span key={i} className="text-center text-[11px] uppercase tracking-[0.35em] text-[#e8dcc0]" style={{ width: 64 }}>{d}</span>
+                ))}
               </div>
+              {/* center tick */}
               <div className="absolute left-1/2 top-0 bottom-0 w-px bg-[#e8c870]" />
+              <div className="absolute left-1/2 -translate-x-1/2 top-0 border-l-[6px] border-r-[6px] border-t-[6px] border-l-transparent border-r-transparent border-t-[#e8c870]" />
             </div>
           </div>
 
