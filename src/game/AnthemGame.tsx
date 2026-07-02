@@ -2385,6 +2385,19 @@ export default function AnthemGame() {
     <div className="relative w-screen h-screen overflow-hidden bg-[#0e0c09] text-[#e8dcc0]">
       <div ref={mountRef} className="absolute inset-0" />
 
+      {/* Cinematic vignette + subtle warm color grade */}
+      {started && (
+        <div
+          className="pointer-events-none absolute inset-0 z-[5]"
+          style={{
+            background:
+              'radial-gradient(ellipse at center, rgba(0,0,0,0) 45%, rgba(0,0,0,0.55) 100%),' +
+              'linear-gradient(180deg, rgba(255,180,110,0.04) 0%, rgba(0,0,0,0) 30%, rgba(20,10,30,0.10) 100%)',
+            mixBlendMode: 'multiply',
+          }}
+        />
+      )}
+
       {!started && (
         <div className="absolute inset-0 z-20 flex items-center justify-center p-6 bg-[#0e0c09]/95">
           <div className="max-w-xl text-center space-y-6">
