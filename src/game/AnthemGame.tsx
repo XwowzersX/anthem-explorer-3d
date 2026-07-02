@@ -178,7 +178,7 @@ export default function AnthemGame() {
     renderer.shadowMap.enabled = false; // perf: shadows were the biggest cost
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.15;
+    renderer.toneMappingExposure = 1.28;
     mount.appendChild(renderer.domElement);
 
     // =====================================================================
