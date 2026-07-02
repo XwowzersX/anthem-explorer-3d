@@ -2429,27 +2429,25 @@ export default function AnthemGame() {
                 {hasLantern ? "🏮 Lantern" : "○ No lantern"}
               </span>
               <span className="text-[#e8c870]">✦ Fragments {fragments}/5</span>
-              <span className="text-[#c8e870]">✿ Flowers {flowers}/3</span>
+              <span className="text-[#c8e870]">✦ Pedestals {puzzleProgress}/3</span>
             </div>
           </div>
 
-          {/* Compass */}
+          {/* Compass — a translating ribbon with duplicated letters */}
           <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 pointer-events-none">
-            <div className="relative w-64 h-8 border border-[#c8a84a]/40 bg-black/50 overflow-hidden">
+            <div className="relative w-64 h-8 border border-[#c8a84a]/40 bg-black/60 overflow-hidden shadow-[0_0_12px_rgba(0,0,0,0.6)]">
               <div
-                className="absolute inset-y-0 flex items-center text-[10px] uppercase tracking-[0.4em] text-[#e8dcc0]"
-                style={{ left: `${(((-compass.yaw / (Math.PI * 2)) % 1 + 1) % 1) * 100 - 50}%`, width: '400%' }}
+                ref={compassRibbonRef}
+                className="absolute top-0 h-full flex items-center will-change-transform"
+                style={{ width: 1024, transform: 'translateX(96px)' }}
               >
-                <span className="w-1/8 text-center" style={{ width: '12.5%' }}>N</span>
-                <span className="w-1/8 text-center" style={{ width: '12.5%' }}>NE</span>
-                <span className="w-1/8 text-center" style={{ width: '12.5%' }}>E</span>
-                <span className="w-1/8 text-center" style={{ width: '12.5%' }}>SE</span>
-                <span className="w-1/8 text-center" style={{ width: '12.5%' }}>S</span>
-                <span className="w-1/8 text-center" style={{ width: '12.5%' }}>SW</span>
-                <span className="w-1/8 text-center" style={{ width: '12.5%' }}>W</span>
-                <span className="w-1/8 text-center" style={{ width: '12.5%' }}>NW</span>
+                {['N','NE','E','SE','S','SW','W','NW','N','NE','E','SE','S','SW','W','NW'].map((d, i) => (
+                  <span key={i} className="text-center text-[11px] uppercase tracking-[0.35em] text-[#e8dcc0]" style={{ width: 64 }}>{d}</span>
+                ))}
               </div>
+              {/* center tick */}
               <div className="absolute left-1/2 top-0 bottom-0 w-px bg-[#e8c870]" />
+              <div className="absolute left-1/2 -translate-x-1/2 top-0 border-l-[6px] border-r-[6px] border-t-[6px] border-l-transparent border-r-transparent border-t-[#e8c870]" />
             </div>
           </div>
 
