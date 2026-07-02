@@ -1889,21 +1889,46 @@ export default function AnthemGame() {
       const p = camera.position;
       const localP = new THREE.Vector3(p.x - SCENE_OFFSETS[currentScene], p.y, p.z);
 
-      // FLOWERS — pluck in field
-      if (currentScene === "surface" && progressRef.current === 2) {
-        for (let i = 0; i < flowerMeshes.length; i++) {
-          const fm = flowerMeshes[i];
-          if (!fm.visible) continue;
-          if (localP.distanceTo(fm.position) < 2.0) {
-            fm.visible = false;
-            flowersRef.current += 1;
-            setFlowers(flowersRef.current);
-            sfx.interact();
-            setNpcLine({ name: "—", line: `You pluck a wildflower. (${flowersRef.current}/3) — offer them to the Golden One.` });
+      // GARDEN PEDESTAL PUZZLE — press E on pedestals shortest→tallest to open the gate
+      if (currentScene === "surface" && !gatePuzzle.solved) {
+        for (const ped of pedestals) {
+          if (ped.lit) continue;
+          if (localP.distanceTo(ped.pos) < 2.2) {
+            const expected = correctOrder[gatePuzzle.order.length];
+            if (ped.idx === expected) {
+              ped.lit = true;
+              (ped.flame.material as THREE.MeshStandardMaterial).emissiveIntensity = 3;
+              ped.light.intensity = 2.4;
+              gatePuzzle.order.push(ped.idx);
+              sfx.bell();
+              setPuzzleProgress(gatePuzzle.order.length);
+              if (gatePuzzle.order.length === correctOrder.length) {
+                gatePuzzle.solved = true;
+                setNpcLine({ name: "—", line: "The stones hum. The gate rises." });
+                // remove collider so player can pass
+                const idx = colliderSets.surface.indexOf(gatePuzzle.collider);
+                if (idx >= 0) colliderSets.surface.splice(idx, 1);
+              } else {
+                setNpcLine({ name: "—", line: `A flame answers. (${gatePuzzle.order.length}/3)` });
+              }
+            } else {
+              // reset
+              sfx.metal();
+              gatePuzzle.order.length = 0;
+              for (const p2 of pedestals) {
+                p2.lit = false;
+                (p2.flame.material as THREE.MeshStandardMaterial).emissiveIntensity = 0;
+                p2.light.intensity = 0;
+              }
+              setPuzzleProgress(0);
+              setNpcLine({ name: "—", line: "The flames die. The order was wrong. Read the world; try again." });
+            }
             return;
           }
         }
       }
+
+
 
 
       // PICKUPS first — they're small and easy to miss
