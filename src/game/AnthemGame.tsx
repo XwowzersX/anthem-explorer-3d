@@ -796,20 +796,21 @@ export default function AnthemGame() {
     // (Clue scroll pinned to the wall.)
     const GATE_Z = 200;
     const stoneWallMat = new THREE.MeshStandardMaterial({ color: 0x5a5348, roughness: 0.95, metalness: 0.02 });
+    // Wall segments span from x=-140 to x=-10 and x=10 to x=140 → opening 20 wide.
     addBox("surface", -75, 0, GATE_Z, 130, 4, 0.8, stoneWallMat);
     addBox("surface",  75, 0, GATE_Z, 130, 4, 0.8, stoneWallMat);
-    // Gate posts
-    addBox("surface", -8, 0, GATE_Z, 1.2, 5.2, 1.2, M.pillarDark);
-    addBox("surface",  8, 0, GATE_Z, 1.2, 5.2, 1.2, M.pillarDark);
+    // Gate posts flush against wall ends
+    addBox("surface", -10.5, 0, GATE_Z, 1.4, 5.2, 1.4, M.pillarDark);
+    addBox("surface",  10.5, 0, GATE_Z, 1.4, 5.2, 1.4, M.pillarDark);
     // Lintel
-    addBox("surface", 0, 0, GATE_Z, 18, 0.8, 0.8, M.woodDark);
-    // Gate itself — a wooden portcullis that slides up when solved
-    const gateMesh = new THREE.Mesh(new THREE.BoxGeometry(15, 4, 0.4),
+    addBox("surface", 0, 0, GATE_Z, 22, 0.8, 0.8, M.woodDark);
+    // Gate itself — a wooden portcullis, 20 wide to fully fill the opening
+    const gateMesh = new THREE.Mesh(new THREE.BoxGeometry(20, 4, 0.4),
       new THREE.MeshStandardMaterial({ color: 0x3a2618, roughness: 0.85, metalness: 0.1 }));
     gateMesh.position.set(0, 2, GATE_Z);
     sceneAdd("surface", gateMesh);
     const gateCollider = { box: new THREE.Box3().setFromCenterAndSize(
-      new THREE.Vector3(0, 2, GATE_Z), new THREE.Vector3(15, 4, 0.6)) };
+      new THREE.Vector3(0, 2, GATE_Z), new THREE.Vector3(20, 4, 0.6)) };
     colliderSets.surface.push(gateCollider);
     const gatePuzzle = {
       mesh: gateMesh,
@@ -818,10 +819,9 @@ export default function AnthemGame() {
       order: [] as number[],
       solved: false,
     };
-    // Three pedestals in front of the gate, arranged so heights are NOT in
-    // spatial order — the player must read the world.
-    const pedHeights = [0.9, 1.6, 1.25]; // indices 0,1,2 — correct order shortest→tallest = 0,2,1
-    const pedPositions: Array<[number, number]> = [[-9, 210], [4, 214], [10, 208]];
+    // Three pedestals on the CITY side of the gate (player approaches from z<200).
+    const pedHeights = [0.9, 1.6, 1.25]; // indices 0,1,2 — correct shortest→tallest = 0,2,1
+    const pedPositions: Array<[number, number]> = [[-9, 192], [4, 188], [10, 194]];
     const pedestals: Array<{ idx: number; base: THREE.Mesh; flame: THREE.Mesh; light: THREE.PointLight; lit: boolean; pos: THREE.Vector3 }> = [];
     for (let i = 0; i < 3; i++) {
       const [px, pz] = pedPositions[i];
