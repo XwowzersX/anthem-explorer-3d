@@ -1833,7 +1833,7 @@ export default function AnthemGame() {
     ];
     let cutsceneIdx = 0;
     const spawnGuards = () => {
-      // 3 guards spawn near the council door on the surface, they chase the player
+      // Guards spawn tight against the council doorway, behind the fleeing player.
       for (let i = 0; i < 3; i++) {
         const g = new THREE.Group();
         const body = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.55, 1.9, 10),
@@ -1842,23 +1842,27 @@ export default function AnthemGame() {
         const head = new THREE.Mesh(new THREE.SphereGeometry(0.3, 12, 10),
           new THREE.MeshStandardMaterial({ color: 0x2a1a0a }));
         head.position.y = 2.15; g.add(head);
-        // spear
         const spear = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 2.6, 6),
           new THREE.MeshStandardMaterial({ color: 0x3a2a18 }));
         spear.position.set(0.5, 1.2, 0); g.add(spear);
-        g.position.set(COUNCIL_CX + (i - 1) * 3, 0, COUNCIL_CZ + 22);
+        // Spawn AT the council door, well behind the player's spawn point.
+        g.position.set(COUNCIL_CX + (i - 1) * 3, 0, COUNCIL_CZ + 19);
         sceneAdd("surface", g);
         chaseState.guards.push({ mesh: g, pos: g.position.clone() });
       }
     };
     const startChase = () => {
       chaseState.active = true;
-      chaseState.timeLeft = 60;
-      setChase({ active: true, timeLeft: 60 });
+      chaseState.timeLeft = 90;
+      chaseState.headStart = 2.0; // seconds before guards begin pursuit
+      setChase({ active: true, timeLeft: 90 });
       setObjective("RUN — reach the iron grate! (Council guards are chasing)");
+      // Teleport player OUT in front of the council, facing the city (yaw = π = south/-z? no, +z direction).
+      // Player must run toward the grate at GRATE_X, GRATE_Z (which is north of city).
+      switchScene("surface", new THREE.Vector3(COUNCIL_CX, 1.7, COUNCIL_CZ + 40), 0);
       spawnGuards();
-      // exit council automatically
-      switchScene("surface", new THREE.Vector3(COUNCIL_CX, 1.7, COUNCIL_CZ + 24), 0);
+      // Re-request pointer lock in case cutscene overlay dropped it.
+      try { renderer.domElement.requestPointerLock(); } catch { /* ignore */ }
       sfx.bell();
     };
     const advanceCouncilCutscene = () => {
