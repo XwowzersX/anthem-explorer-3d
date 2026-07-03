@@ -796,20 +796,21 @@ export default function AnthemGame() {
     // (Clue scroll pinned to the wall.)
     const GATE_Z = 200;
     const stoneWallMat = new THREE.MeshStandardMaterial({ color: 0x5a5348, roughness: 0.95, metalness: 0.02 });
+    // Wall segments span from x=-140 to x=-10 and x=10 to x=140 → opening 20 wide.
     addBox("surface", -75, 0, GATE_Z, 130, 4, 0.8, stoneWallMat);
     addBox("surface",  75, 0, GATE_Z, 130, 4, 0.8, stoneWallMat);
-    // Gate posts
-    addBox("surface", -8, 0, GATE_Z, 1.2, 5.2, 1.2, M.pillarDark);
-    addBox("surface",  8, 0, GATE_Z, 1.2, 5.2, 1.2, M.pillarDark);
+    // Gate posts flush against wall ends
+    addBox("surface", -10.5, 0, GATE_Z, 1.4, 5.2, 1.4, M.pillarDark);
+    addBox("surface",  10.5, 0, GATE_Z, 1.4, 5.2, 1.4, M.pillarDark);
     // Lintel
-    addBox("surface", 0, 0, GATE_Z, 18, 0.8, 0.8, M.woodDark);
-    // Gate itself — a wooden portcullis that slides up when solved
-    const gateMesh = new THREE.Mesh(new THREE.BoxGeometry(15, 4, 0.4),
+    addBox("surface", 0, 0, GATE_Z, 22, 0.8, 0.8, M.woodDark);
+    // Gate itself — a wooden portcullis, 20 wide to fully fill the opening
+    const gateMesh = new THREE.Mesh(new THREE.BoxGeometry(20, 4, 0.4),
       new THREE.MeshStandardMaterial({ color: 0x3a2618, roughness: 0.85, metalness: 0.1 }));
     gateMesh.position.set(0, 2, GATE_Z);
     sceneAdd("surface", gateMesh);
     const gateCollider = { box: new THREE.Box3().setFromCenterAndSize(
-      new THREE.Vector3(0, 2, GATE_Z), new THREE.Vector3(15, 4, 0.6)) };
+      new THREE.Vector3(0, 2, GATE_Z), new THREE.Vector3(20, 4, 0.6)) };
     colliderSets.surface.push(gateCollider);
     const gatePuzzle = {
       mesh: gateMesh,
@@ -818,10 +819,9 @@ export default function AnthemGame() {
       order: [] as number[],
       solved: false,
     };
-    // Three pedestals in front of the gate, arranged so heights are NOT in
-    // spatial order — the player must read the world.
-    const pedHeights = [0.9, 1.6, 1.25]; // indices 0,1,2 — correct order shortest→tallest = 0,2,1
-    const pedPositions: Array<[number, number]> = [[-9, 210], [4, 214], [10, 208]];
+    // Three pedestals on the CITY side of the gate (player approaches from z<200).
+    const pedHeights = [0.9, 1.6, 1.25]; // indices 0,1,2 — correct shortest→tallest = 0,2,1
+    const pedPositions: Array<[number, number]> = [[-9, 192], [4, 188], [10, 194]];
     const pedestals: Array<{ idx: number; base: THREE.Mesh; flame: THREE.Mesh; light: THREE.PointLight; lit: boolean; pos: THREE.Vector3 }> = [];
     for (let i = 0; i < 3; i++) {
       const [px, pz] = pedPositions[i];
@@ -1833,7 +1833,7 @@ export default function AnthemGame() {
     ];
     let cutsceneIdx = 0;
     const spawnGuards = () => {
-      // 3 guards spawn near the council door on the surface, they chase the player
+      // Guards spawn tight against the council doorway, behind the fleeing player.
       for (let i = 0; i < 3; i++) {
         const g = new THREE.Group();
         const body = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.55, 1.9, 10),
@@ -1842,23 +1842,27 @@ export default function AnthemGame() {
         const head = new THREE.Mesh(new THREE.SphereGeometry(0.3, 12, 10),
           new THREE.MeshStandardMaterial({ color: 0x2a1a0a }));
         head.position.y = 2.15; g.add(head);
-        // spear
         const spear = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 2.6, 6),
           new THREE.MeshStandardMaterial({ color: 0x3a2a18 }));
         spear.position.set(0.5, 1.2, 0); g.add(spear);
-        g.position.set(COUNCIL_CX + (i - 1) * 3, 0, COUNCIL_CZ + 22);
+        // Spawn AT the council door, well behind the player's spawn point.
+        g.position.set(COUNCIL_CX + (i - 1) * 3, 0, COUNCIL_CZ + 19);
         sceneAdd("surface", g);
         chaseState.guards.push({ mesh: g, pos: g.position.clone() });
       }
     };
     const startChase = () => {
       chaseState.active = true;
-      chaseState.timeLeft = 60;
-      setChase({ active: true, timeLeft: 60 });
+      chaseState.timeLeft = 90;
+      chaseState.headStart = 2.0; // seconds before guards begin pursuit
+      setChase({ active: true, timeLeft: 90 });
       setObjective("RUN — reach the iron grate! (Council guards are chasing)");
+      // Teleport player OUT in front of the council, facing the city (yaw = π = south/-z? no, +z direction).
+      // Player must run toward the grate at GRATE_X, GRATE_Z (which is north of city).
+      switchScene("surface", new THREE.Vector3(COUNCIL_CX, 1.7, COUNCIL_CZ + 40), 0);
       spawnGuards();
-      // exit council automatically
-      switchScene("surface", new THREE.Vector3(COUNCIL_CX, 1.7, COUNCIL_CZ + 24), 0);
+      // Re-request pointer lock in case cutscene overlay dropped it.
+      try { renderer.domElement.requestPointerLock(); } catch { /* ignore */ }
       sfx.bell();
     };
     const advanceCouncilCutscene = () => {
@@ -2075,7 +2079,7 @@ export default function AnthemGame() {
     let stepAccum = 0;
 
     // Chase-scene state
-    const chaseState = { active: false, timeLeft: 0, guards: [] as { mesh: THREE.Group; pos: THREE.Vector3 }[] };
+    const chaseState = { active: false, timeLeft: 0, headStart: 0, guards: [] as { mesh: THREE.Group; pos: THREE.Vector3 }[] };
     const councilCutscene = { active: false, step: 0, timer: 0 };
     // Surface-material footstep pickers
     const surfaceKind = (): "cobble" | "grass" | "wood" | "stone" | "dirt" => {
@@ -2179,20 +2183,27 @@ export default function AnthemGame() {
       // Chase logic — guards seek the player on surface; win by descending grate
       if (chaseState.active && currentScene === "surface") {
         chaseState.timeLeft -= dt;
+        if (chaseState.headStart > 0) chaseState.headStart -= dt;
         if (frame % 10 === 0) setChase({ active: true, timeLeft: Math.max(0, chaseState.timeLeft) });
+        const guardsMove = chaseState.headStart <= 0;
         for (const g of chaseState.guards) {
-          const dir = new THREE.Vector3(camera.position.x - g.mesh.position.x, 0, camera.position.z - g.mesh.position.z);
-          const dist = dir.length();
-          if (dist > 0.1) dir.normalize().multiplyScalar(dt * 5.5);
-          g.mesh.position.x += dir.x; g.mesh.position.z += dir.z;
-          g.mesh.rotation.y = Math.atan2(dir.x, dir.z);
-          if (dist < 1.6) {
-            // Caught → reset to council doorstep, still chasing
-            camera.position.set(COUNCIL_CX, 1.7, COUNCIL_CZ + 26);
-            setNpcLine({ name: "Guard", line: "Halt! (You have been caught — try again.)" });
+          if (guardsMove) {
+            const dir = new THREE.Vector3(camera.position.x - g.mesh.position.x, 0, camera.position.z - g.mesh.position.z);
+            const dist = dir.length();
+            if (dist > 0.1) dir.normalize().multiplyScalar(dt * 4.8);
+            g.mesh.position.x += dir.x; g.mesh.position.z += dir.z;
+            g.mesh.rotation.y = Math.atan2(dir.x, dir.z);
+            if (dist < 1.3) {
+              // Caught → reset player far in front of council with fresh head-start
+              camera.position.set(COUNCIL_CX, 1.7, COUNCIL_CZ + 40);
+              chaseState.headStart = 2.0;
+              for (let i = 0; i < chaseState.guards.length; i++) {
+                chaseState.guards[i].mesh.position.set(COUNCIL_CX + (i - 1) * 3, 0, COUNCIL_CZ + 19);
+              }
+              setNpcLine({ name: "Guard", line: "Halt! (You have been caught — try again.)" });
+            }
           }
         }
-        // Win: reach grate area
         const dg2 = Math.hypot(camera.position.x - GRATE_X, camera.position.z - GRATE_Z);
         if (dg2 < 4) {
           chaseState.active = false;
@@ -2203,8 +2214,9 @@ export default function AnthemGame() {
           setObjective("Flee through the Uncharted Forest");
         }
         if (chaseState.timeLeft <= 0 && chaseState.active) {
-          camera.position.set(COUNCIL_CX, 1.7, COUNCIL_CZ + 26);
-          chaseState.timeLeft = 45;
+          camera.position.set(COUNCIL_CX, 1.7, COUNCIL_CZ + 40);
+          chaseState.timeLeft = 60;
+          chaseState.headStart = 2.0;
         }
       }
 
