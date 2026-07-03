@@ -400,15 +400,21 @@ export default function AnthemGame() {
       stone: noiseTex(128, 128, [60, 56, 48], 38, { color: "#15110c", every: 32, thick: 1 }, { color: "#1a1612", count: 60, size: 2 }, 2),
       cobble: noiseTex(256, 256, [70, 64, 56], 50, { color: "#1a1612", every: 24, thick: 2 }, { color: "#2a241c", count: 120, size: 2 }, 24),
       wood: noiseTex(128, 256, [70, 48, 28], 28, { color: "#2a1808", every: 18, thick: 1, horiz: true }, undefined, 2),
-      plaster: noiseTex(128, 128, [120, 108, 84], 30, undefined, { color: "#3a3020", count: 80, size: 2 }, 2),
-      plasterDark: noiseTex(128, 128, [78, 68, 50], 28, undefined, { color: "#2a2418", count: 80, size: 2 }, 2),
-      roof: noiseTex(128, 128, [42, 38, 30], 22, { color: "#15110c", every: 16, thick: 2, horiz: true }, undefined, 3),
+      // 18th-century warm cream plaster (aged, sun-bleached)
+      plaster: noiseTex(128, 128, [215, 200, 165], 25, undefined, { color: "#8a7a5a", count: 60, size: 2 }, 2),
+      plasterDark: noiseTex(128, 128, [175, 158, 125], 28, undefined, { color: "#6a5a40", count: 70, size: 2 }, 2),
+      // Clay tile roof - warm terracotta
+      roof: noiseTex(128, 128, [145, 85, 60], 35, { color: "#8a4028", every: 20, thick: 2, horiz: true }, { color: "#3a1810", count: 40, size: 3 }, 3),
+      // Brick texture for grand buildings
+      brick: noiseTex(128, 128, [140, 72, 55], 45, { color: "#5a2a1a", every: 16, thick: 2 }, { color: "#1a0808", count: 50, size: 2 }, 2),
       grass: noiseTex(256, 256, [120, 108, 56], 60, undefined, { color: "#c8a84a", count: 400, size: 2 }, 40),
       iron: noiseTex(128, 128, [70, 64, 52], 40, { color: "#1a1612", every: 12, thick: 2 }, { color: "#a08050", count: 30, size: 2 }, 1),
       tunnel: noiseTex(128, 128, [38, 32, 26], 26, undefined, { color: "#0a0806", count: 100, size: 2 }, 3),
       bark: noiseTex(64, 256, [44, 32, 22], 24, { color: "#1a1208", every: 8, thick: 1, horiz: true }, undefined, 2),
       leaves: noiseTex(128, 128, [40, 70, 44], 50, undefined, { color: "#1a3a20", count: 200, size: 2 }, 2),
       gold: noiseTex(128, 128, [220, 190, 110], 30, undefined, { color: "#fff0a0", count: 80, size: 2 }, 1),
+      // Slate for grand buildings
+      slate: noiseTex(128, 128, [70, 75, 82], 18, { color: "#404550", every: 14, thick: 1 }, { color: "#2a2d32", count: 80, size: 2 }, 2),
     };
 
     // =====================================================================
@@ -422,9 +428,15 @@ export default function AnthemGame() {
       cobble: new THREE.MeshStandardMaterial({ map: T.cobble, color: 0x8a8278, roughness: 0.95 }),
       wood:   new THREE.MeshStandardMaterial({ map: T.wood,   color: 0x8a6238, roughness: 0.85 }),
       woodDark: new THREE.MeshStandardMaterial({ map: T.wood, color: 0x5a3a20, roughness: 0.9 }),
-      plaster: new THREE.MeshStandardMaterial({ map: T.plaster, color: 0xc8b890, roughness: 0.95 }),
-      plasterDark: new THREE.MeshStandardMaterial({ map: T.plasterDark, color: 0x9a8a6a, roughness: 0.95 }),
-      roof: new THREE.MeshStandardMaterial({ map: T.roof, color: 0x4a4238, roughness: 0.9 }),
+      // Warm cream plaster for 18th-century facades
+      plaster: new THREE.MeshStandardMaterial({ map: T.plaster, color: 0xdfd5b8, roughness: 0.93 }),
+      plasterDark: new THREE.MeshStandardMaterial({ map: T.plasterDark, color: 0xc9b896, roughness: 0.94 }),
+      // Terracotta clay tile roofs
+      roof: new THREE.MeshStandardMaterial({ map: T.roof, color: 0x9a5a40, roughness: 0.85 }),
+      // Brick for grand accents
+      brick: new THREE.MeshStandardMaterial({ map: T.brick, color: 0x8a4838, roughness: 0.88 }),
+      // Dark slate for council/institutional buildings
+      slate: new THREE.MeshStandardMaterial({ map: T.slate, color: 0x485058, roughness: 0.9 }),
       door: new THREE.MeshStandardMaterial({
         map: T.wood, color: 0x4a3a20, emissive: 0xff8030, emissiveIntensity: 0.55,
         metalness: 0.35, roughness: 0.55,
@@ -645,9 +657,10 @@ export default function AnthemGame() {
     sceneAdd("surface", plaza);
 
     // =====================================================================
-    // SURFACE — THE CITY (18th-century plaster + timber, pitched roofs)
+    // SURFACE — THE CITY (18th-century European aesthetic)
     // =====================================================================
-    const facadeMats = [M.plaster, M.plasterDark, M.plaster, M.stone3];
+    const facadeMats = [M.plaster, M.plasterDark, M.plaster, M.plasterDark];
+    const accentMats = [M.brick, M.slate, M.stone3];
     const GRID = 7; // 15x15
     for (let i = -GRID; i <= GRID; i++) {
       for (let j = -GRID; j <= GRID; j++) {
@@ -660,70 +673,166 @@ export default function AnthemGame() {
         const x = i * 17 + (rand() - 0.5) * 1.4;
         const z = j * 17 + (rand() - 0.5) * 1.4;
         const w = 8 + rand() * 4;
-        const dd = 8 + rand() * 4;
-        const h = 4.5 + rand() * 4.5; // squat 18th-century scale
+        const dd = 8 + rand() * 5;
+        // Taller 18th-century row houses (3-5 stories)
+        const h = 6 + rand() * 7;
+        const buildingStyle = Math.floor(rand() * 4);
         const mat = facadeMats[Math.floor(rand() * 4)];
+        const accent = accentMats[Math.floor(rand() * 3)];
+        // Main building body
         addBox("surface", x, 0, z, w, h, dd, mat);
-        // exposed timber bands (Tudor-ish)
-        if (rand() > 0.4) {
-          const band = new THREE.Mesh(new THREE.BoxGeometry(w + 0.05, 0.3, dd + 0.05), M.timber);
-          band.position.set(x, h * 0.55, z);
-          sceneAdd("surface", band);
+        // Ground floor accent (stone/brick base - common in 18th c.)
+        const baseH = 1.2 + rand() * 0.6;
+        const baseMat = buildingStyle === 0 ? M.brick : M.stone3;
+        const baseGeo = new THREE.BoxGeometry(w + 0.02, baseH, dd + 0.02);
+        const baseMesh = new THREE.Mesh(baseGeo, baseMat);
+        baseMesh.position.set(x, baseH / 2, z);
+        sceneAdd("surface", baseMesh);
+        // Horizontal string courses (cornices between floors)
+        for (let floor = 1; floor < Math.floor(h / 2.8); floor++) {
+          const corniceY = floor * 2.8;
+          const cornice = new THREE.Mesh(new THREE.BoxGeometry(w + 0.04, 0.08, dd + 0.04), M.timber);
+          cornice.position.set(x, corniceY, z);
+          sceneAdd("surface", cornice);
         }
-        // pitched gable roof — wider than building, like overhanging eaves
-        const roofGeo = new THREE.ConeGeometry(Math.max(w, dd) * 0.78, 2.6 + rand() * 1.4, 4);
-        const roofMesh = new THREE.Mesh(roofGeo, M.roof);
-        roofMesh.rotation.y = Math.PI / 4;
-        roofMesh.position.set(x, h + 1.3, z);
-        sceneAdd("surface", roofMesh);
-        // chimney
-        if (rand() > 0.55) {
-          addBox("surface", x + (rand() - 0.5) * w * 0.5, h + 0.4, z + (rand() - 0.5) * dd * 0.5,
-            0.6, 1.6, 0.6, M.stone3, false);
+        // Mansard roof (steep lower slope, flatter upper) - French 18th c.
+        if (buildingStyle <= 1) {
+          // Mansard-style pitched roof
+          const lowerPitch = 1.8;
+          const mansardGeo = new THREE.ConeGeometry(Math.max(w, dd) * 0.72, lowerPitch + rand() * 1.2, 4);
+          const mansardMesh = new THREE.Mesh(mansardGeo, M.roof);
+          mansardMesh.rotation.y = Math.PI / 4;
+          mansardMesh.position.set(x, h + lowerPitch / 2, z);
+          sceneAdd("surface", mansardMesh);
+        } else {
+          // Traditional gable
+          const roofGeo = new THREE.ConeGeometry(Math.max(w, dd) * 0.68, 2.2 + rand() * 1.5, 4);
+          const roofMesh = new THREE.Mesh(roofGeo, M.roof);
+          roofMesh.rotation.y = Math.PI / 4;
+          roofMesh.position.set(x, h + 1.1, z);
+          sceneAdd("surface", roofMesh);
         }
-        // warm window — emissive only
-        if (rand() > 0.3) {
+        // Dormer windows (poke through the roof)
+        if (rand() > 0.5 && h > 8) {
+          const dormerCount = 1 + Math.floor(rand() * 2);
+          for (let d = 0; d < dormerCount; d++) {
+            const dx = x + (rand() - 0.5) * w * 0.5;
+            const dz = z + (rand() > 0.5 ? dd / 2 + 0.3 : -dd / 2 - 0.3);
+            // Dormer box
+            const dormerBox = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.5, 0.8), mat);
+            dormerBox.position.set(dx, h + 1.5, dz);
+            sceneAdd("surface", dormerBox);
+            // Dormer roof (small gable)
+            const dormerRoof = new THREE.Mesh(new THREE.ConeGeometry(1.0, 0.7, 4), M.roof);
+            dormerRoof.rotation.y = Math.PI / 4;
+            dormerRoof.position.set(dx, h + 2.55, dz);
+            sceneAdd("surface", dormerRoof);
+            // Dormer window (glowing)
+            const dormerWin = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 1.0), M.window);
+            dormerWin.position.set(dx, h + 1.5, dz + (dz > z ? 0.41 : -0.41));
+            if (dz < z) dormerWin.rotation.y = Math.PI;
+            sceneAdd("surface", dormerWin);
+          }
+        }
+        // Chimneys
+        const chimneyCount = 1 + Math.floor(rand() * 2);
+        for (let c = 0; c < chimneyCount; c++) {
+          const chx = x + (rand() - 0.5) * w * 0.6;
+          const chz = z + (rand() - 0.5) * dd * 0.6;
+          addBox("surface", chx, h + 0.6, chz, 0.5, 2.0 + rand() * 0.8, 0.5, M.brick, false);
+        }
+        // Windows with shutters (multiple floors)
+        for (let wy = 1.8; wy < h - 1; wy += 2.8) {
+          for (const side of (rand() > 0.5 ? ["south", "north"] as const : ["east", "west"] as const)) {
+            if (rand() > 0.4) continue; // not every floor has every window
+            // Main window
+            const winW = 1.2 + rand() * 0.3;
+            const winH = 1.5 + rand() * 0.3;
+            const win = new THREE.Mesh(new THREE.PlaneGeometry(winW, winH), M.window);
+            let wx = x, wz = z;
+            if (side === "south") { wz = z + dd / 2 + 0.03; }
+            else if (side === "north") { wz = z - dd / 2 - 0.03; win.rotation.y = Math.PI; }
+            else if (side === "east") { wx = x + w / 2 + 0.03; win.rotation.y = Math.PI / 2; }
+            else { wx = x - w / 2 - 0.03; win.rotation.y = -Math.PI / 2; }
+            win.position.set(wx, wy, wz);
+            sceneAdd("surface", win);
+            // Shutters (closed or open, randomly)
+            if (rand() > 0.35) {
+              const shutterMat = rand() > 0.5 ? M.timber : M.woodDark;
+              const shutterH = winH - 0.1;
+              const leftShutter = new THREE.Mesh(new THREE.BoxGeometry(0.25, shutterH, 0.05), shutterMat);
+              const rightShutter = new THREE.Mesh(new THREE.BoxGeometry(0.25, shutterH, 0.05), shutterMat);
+              if (side === "south") {
+                leftShutter.position.set(wx - winW / 2 - 0.15, wy, wz + 0.04);
+                rightShutter.position.set(wx + winW / 2 + 0.15, wy, wz + 0.04);
+              } else if (side === "north") {
+                leftShutter.position.set(wx - winW / 2 - 0.15, wy, wz - 0.04);
+                rightShutter.position.set(wx + winW / 2 + 0.15, wy, wz - 0.04);
+              } else if (side === "east") {
+                leftShutter.position.set(wx + 0.04, wy, wz - winW / 2 - 0.15);
+                rightShutter.position.set(wx + 0.04, wy, wz + winW / 2 + 0.15);
+              } else {
+                leftShutter.position.set(wx - 0.04, wy, wz - winW / 2 - 0.15);
+                rightShutter.position.set(wx - 0.04, wy, wz + winW / 2 + 0.15);
+              }
+              sceneAdd("surface", leftShutter);
+              sceneAdd("surface", rightShutter);
+            }
+          }
+        }
+        // Window boxes / flower boxes under windows
+        if (rand() > 0.6) {
           const face = j > 0 ? "north" : j < 0 ? "south" : i > 0 ? "west" : "east";
-          const win = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 1.0), M.window);
-          const wy = 1.5 + rand() * (h - 3);
-          if (face === "south") { win.position.set(x, wy, z + dd / 2 + 0.03); }
-          else if (face === "north") { win.position.set(x, wy, z - dd / 2 - 0.03); win.rotation.y = Math.PI; }
-          else if (face === "east") { win.position.set(x + w / 2 + 0.03, wy, z); win.rotation.y = Math.PI / 2; }
-          else { win.position.set(x - w / 2 - 0.03, wy, z); win.rotation.y = -Math.PI / 2; }
-          sceneAdd("surface", win);
+          const boxZ = face === "north" ? z - dd / 2 - 0.12 : face === "south" ? z + dd / 2 + 0.12 : z;
+          const boxX = face === "east" ? x + w / 2 + 0.12 : face === "west" ? x - w / 2 - 0.12 : x;
+          const flowerBox = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.25, 0.25), M.woodDark);
+          flowerBox.position.set(boxX, 1.6, boxZ);
+          sceneAdd("surface", flowerBox);
         }
       }
     }
 
-    // Fire-burning street lamps along boulevards — every lamp animated
-    const lampGeo = new THREE.CylinderGeometry(0.08, 0.12, 4.5, 6);
-    const flameGeo = new THREE.ConeGeometry(0.28, 0.7, 6);
-    const flameCoreGeo = new THREE.ConeGeometry(0.14, 0.45, 6);
+    // Fire-burning street lamps along boulevards — 18th-century iron style
+    const lampPostGeo = new THREE.CylinderGeometry(0.06, 0.1, 4.2, 8);
+    const lampArmGeo = new THREE.BoxGeometry(0.6, 0.06, 0.06);
+    const flameGeo = new THREE.ConeGeometry(0.22, 0.55, 6);
+    const flameCoreGeo = new THREE.ConeGeometry(0.11, 0.35, 6);
     const flickerLamps: { light: THREE.PointLight | null; base: number; cone: THREE.Mesh; core?: THREE.Mesh }[] = [];
     for (let k = -GRID; k <= GRID; k++) {
       if (k === 0) continue;
       for (const [lx, lz] of [[-5, k * 17], [5, k * 17], [k * 17, -5], [k * 17, 5]] as const) {
-        const post = new THREE.Mesh(lampGeo, M.timber);
-        post.position.set(lx, 2.25, lz);
+        // Wrought iron post (dark matte)
+        const post = new THREE.Mesh(lampPostGeo, M.rail);
+        post.position.set(lx, 2.1, lz);
         sceneAdd("surface", post);
-        // wrought-iron cap
-        addBox("surface", lx, 4.55, lz, 0.4, 0.15, 0.4, M.bedFrame, false);
-        // flame
+        // Decorative bracket arm (curved iron)
+        const arm = new THREE.Mesh(lampArmGeo, M.rail);
+        arm.position.set(lx, 4.15, lz);
+        sceneAdd("surface", arm);
+        // Lantern cage (glass panes implied)
+        const lanternBase = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.08, 0.35), M.rail);
+        lanternBase.position.set(lx, 4.35, lz);
+        sceneAdd("surface", lanternBase);
+        const lanternTop = new THREE.Mesh(new THREE.ConeGeometry(0.28, 0.22, 4), M.rail);
+        lanternTop.rotation.y = Math.PI / 4;
+        lanternTop.position.set(lx, 4.65, lz);
+        sceneAdd("surface", lanternTop);
+        // Flame
         const flame = new THREE.Mesh(flameGeo, M.flame);
-        flame.position.set(lx, 5.0, lz);
+        flame.position.set(lx, 4.5, lz);
         sceneAdd("surface", flame);
         const core = new THREE.Mesh(flameCoreGeo, M.flameCore);
-        core.position.set(lx, 4.95, lz);
+        core.position.set(lx, 4.46, lz);
         sceneAdd("surface", core);
-        // real PointLight only on every 3rd (perf), but ALL flames animate
+        // Real PointLight only on every 3rd (perf), but ALL flames animate
         const hasLight = (Math.abs(k) + (lx > 0 ? 0 : 1)) % 3 === 0;
         let pl: THREE.PointLight | null = null;
         if (hasLight) {
-          pl = new THREE.PointLight(0xff8030, 1.4, 18);
-          pl.position.set(lx, 5.2, lz);
+          pl = new THREE.PointLight(0xff9030, 1.6, 20);
+          pl.position.set(lx, 4.6, lz);
           sceneAdd("surface", pl);
         }
-        flickerLamps.push({ light: pl, base: 1.4, cone: flame, core });
+        flickerLamps.push({ light: pl, base: 1.6, cone: flame, core });
       }
     }
 
@@ -864,27 +973,43 @@ export default function AnthemGame() {
     sceneAdd("surface", liberty);
 
     // =====================================================================
-    // SURFACE — COUNCIL HALL EXTERIOR
+    // SURFACE — COUNCIL HALL EXTERIOR (grand institutional building)
     // =====================================================================
     const COUNCIL_CX = 0, COUNCIL_CZ = -160;
-    // Exterior shell — no door gap, the door is a mesh you press E on
-    addBox("surface", COUNCIL_CX, 0, COUNCIL_CZ + 18, 50, 16, 0.5, M.plaster); // front
-    addBox("surface", COUNCIL_CX, 0, COUNCIL_CZ - 18, 50, 16, 0.5, M.plaster); // back
-    addBox("surface", COUNCIL_CX + 25, 0, COUNCIL_CZ, 0.5, 16, 36, M.plaster);
-    addBox("surface", COUNCIL_CX - 25, 0, COUNCIL_CZ, 0.5, 16, 36, M.plaster);
-    // pillars in front of council
+    // Exterior shell — slate grey institutional look
+    addBox("surface", COUNCIL_CX, 0, COUNCIL_CZ + 18, 50, 16, 0.5, M.slate); // front
+    addBox("surface", COUNCIL_CX, 0, COUNCIL_CZ - 18, 50, 16, 0.5, M.slate); // back
+    addBox("surface", COUNCIL_CX + 25, 0, COUNCIL_CZ, 0.5, 16, 36, M.slate);
+    addBox("surface", COUNCIL_CX - 25, 0, COUNCIL_CZ, 0.5, 16, 36, M.slate);
+    // Grand stone portico columns
     for (let i = -2; i <= 2; i++) {
       if (i === 0) continue;
       addBox("surface", COUNCIL_CX + i * 8, 0, COUNCIL_CZ + 22, 1.6, 13, 1.6, M.pillarDark);
     }
+    // Classical pediment triangle above door
+    const pedimentGeo = new THREE.ConeGeometry(12, 4, 3);
+    const pedimentMesh = new THREE.Mesh(pedimentGeo, M.stone3);
+    pedimentMesh.rotation.x = Math.PI / 2;
+    pedimentMesh.rotation.z = Math.PI;
+    pedimentMesh.position.set(COUNCIL_CX, 18, COUNCIL_CZ + 20);
+    sceneAdd("surface", pedimentMesh);
     // roof slab
-    const councilRoof = new THREE.Mesh(new THREE.BoxGeometry(52, 0.6, 38), M.roof);
+    const councilRoof = new THREE.Mesh(new THREE.BoxGeometry(52, 0.6, 38), M.slate);
     councilRoof.position.set(COUNCIL_CX, 16.3, COUNCIL_CZ);
     sceneAdd("surface", councilRoof);
-    // Door
+    // Grand double door with arch
     const councilDoor = new THREE.Mesh(new THREE.BoxGeometry(6, 9, 0.3), M.doorWood);
     councilDoor.position.set(COUNCIL_CX, 4.5, COUNCIL_CZ + 18.2);
     sceneAdd("surface", councilDoor);
+    // Ornate door frame
+    const doorFrame = new THREE.Mesh(new THREE.BoxGeometry(6.8, 9.8, 0.2), M.stone3);
+    doorFrame.position.set(COUNCIL_CX, 4.5, COUNCIL_CZ + 18.1);
+    sceneAdd("surface", doorFrame);
+    // Arched window above door
+    const archWin = new THREE.Mesh(new THREE.SphereGeometry(1.5, 16, 8, 0, Math.PI * 2, Math.PI / 2), M.window);
+    archWin.rotation.x = Math.PI / 2;
+    archWin.position.set(COUNCIL_CX, 12, COUNCIL_CZ + 18.3);
+    sceneAdd("surface", archWin);
 
     // =====================================================================
     // SURFACE — UNCHARTED FOREST
@@ -2220,13 +2345,15 @@ export default function AnthemGame() {
             return;
           }
         }
-        // SURFACE — doors
-        for (const d of doors) {
-          if (localP.distanceTo(d.surfacePos) < 3) {
-            if (progressRef.current - 1 >= d.unlockAfter || d.unlockAfter < 0) {
-              sfx.door();
-              switchScene(d.target, d.interiorSpawn, d.interiorYaw);
-              return;
+        // SURFACE — doors (skip during chase!)
+        if (!chaseState.active) {
+          for (const d of doors) {
+            if (localP.distanceTo(d.surfacePos) < 3) {
+              if (progressRef.current - 1 >= d.unlockAfter || d.unlockAfter < 0) {
+                sfx.door();
+                switchScene(d.target, d.interiorSpawn, d.interiorYaw);
+                return;
+              }
             }
           }
         }
@@ -2573,9 +2700,20 @@ export default function AnthemGame() {
           setObjective("Flee through the Uncharted Forest");
         }
         if (chaseState.timeLeft <= 0 && chaseState.active) {
+          // Time ran out — full reset (player + guards)
           camera.position.set(COUNCIL_CX, 1.7, COUNCIL_CZ + 40);
-          chaseState.timeLeft = 60;
+          chaseState.timeLeft = 90;
           chaseState.headStart = 2.0;
+          chaseState.hadContact = false;
+          for (let i = 0; i < chaseState.guards.length; i++) {
+            const gi = chaseState.guards[i];
+            gi.mesh.position.set(COUNCIL_CX + (i - 1) * 3, 0, COUNCIL_CZ + 19);
+            gi.state = "seek";
+            gi.lastSeen = new THREE.Vector3(COUNCIL_CX, 0, COUNCIL_CZ + 40);
+            gi.searchT = 0;
+          }
+          setChase({ active: true, timeLeft: 90 });
+          setNpcLine({ name: "—", line: "Time's up! The guards have spotted you again. Run!" });
         }
       }
 
