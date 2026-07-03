@@ -2187,6 +2187,11 @@ export default function AnthemGame() {
         advanceCouncilCutscene();
         return;
       }
+      // Block ALL interactions during chase (except dismissing npc lines)
+      if (chaseState.active) {
+        if (npcLineRef.current) { npcLineRef.current = null; setNpcLine(null); }
+        return;
+      }
       if (npcLineRef.current) { npcLineRef.current = null; setNpcLine(null); return; }
       const p = camera.position;
       const localP = new THREE.Vector3(p.x - SCENE_OFFSETS[currentScene], p.y, p.z);
@@ -2362,15 +2367,13 @@ export default function AnthemGame() {
             return;
           }
         }
-        // SURFACE — doors (skip during chase!)
-        if (!chaseState.active) {
-          for (const d of doors) {
-            if (localP.distanceTo(d.surfacePos) < 3) {
-              if (progressRef.current - 1 >= d.unlockAfter || d.unlockAfter < 0) {
-                sfx.door();
-                switchScene(d.target, d.interiorSpawn, d.interiorYaw);
-                return;
-              }
+        // SURFACE — doors
+        for (const d of doors) {
+          if (localP.distanceTo(d.surfacePos) < 3) {
+            if (progressRef.current - 1 >= d.unlockAfter || d.unlockAfter < 0) {
+              sfx.door();
+              switchScene(d.target, d.interiorSpawn, d.interiorYaw);
+              return;
             }
           }
         }
