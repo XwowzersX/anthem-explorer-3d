@@ -678,14 +678,12 @@ export default function AnthemGame() {
         const h = 6 + rand() * 7;
         const buildingStyle = Math.floor(rand() * 4);
         const mat = facadeMats[Math.floor(rand() * 4)];
-        const accent = accentMats[Math.floor(rand() * 3)];
         // Main building body
         addBox("surface", x, 0, z, w, h, dd, mat);
         // Ground floor accent (stone/brick base - common in 18th c.)
         const baseH = 1.2 + rand() * 0.6;
         const baseMat = buildingStyle === 0 ? M.brick : M.stone3;
-        const baseGeo = new THREE.BoxGeometry(w + 0.02, baseH, dd + 0.02);
-        const baseMesh = new THREE.Mesh(baseGeo, baseMat);
+        const baseMesh = new THREE.Mesh(new THREE.BoxGeometry(w + 0.02, baseH, dd + 0.02), baseMat);
         baseMesh.position.set(x, baseH / 2, z);
         sceneAdd("surface", baseMesh);
         // Horizontal string courses (cornices between floors)
@@ -695,141 +693,160 @@ export default function AnthemGame() {
           cornice.position.set(x, corniceY, z);
           sceneAdd("surface", cornice);
         }
+        // Roof height varies with building style
+        const roofH = 1.8 + rand() * 1.2;
         // Mansard roof (steep lower slope, flatter upper) - French 18th c.
         if (buildingStyle <= 1) {
-          // Mansard-style pitched roof
-          const lowerPitch = 1.8;
-          const mansardGeo = new THREE.ConeGeometry(Math.max(w, dd) * 0.72, lowerPitch + rand() * 1.2, 4);
+          const mansardGeo = new THREE.ConeGeometry(Math.max(w, dd) * 0.72, roofH, 4);
           const mansardMesh = new THREE.Mesh(mansardGeo, M.roof);
           mansardMesh.rotation.y = Math.PI / 4;
-          mansardMesh.position.set(x, h + lowerPitch / 2, z);
+          mansardMesh.position.set(x, h + roofH / 2, z);
           sceneAdd("surface", mansardMesh);
         } else {
           // Traditional gable
-          const roofGeo = new THREE.ConeGeometry(Math.max(w, dd) * 0.68, 2.2 + rand() * 1.5, 4);
+          const gableH = 2.2 + rand() * 1.5;
+          const roofGeo = new THREE.ConeGeometry(Math.max(w, dd) * 0.68, gableH, 4);
           const roofMesh = new THREE.Mesh(roofGeo, M.roof);
           roofMesh.rotation.y = Math.PI / 4;
-          roofMesh.position.set(x, h + 1.1, z);
+          roofMesh.position.set(x, h + gableH / 2, z);
           sceneAdd("surface", roofMesh);
         }
-        // Dormer windows (poke through the roof)
+        // Dormer windows (only on front/back faces to avoid clipping)
         if (rand() > 0.5 && h > 8) {
           const dormerCount = 1 + Math.floor(rand() * 2);
+          const dormerFace = rand() > 0.5 ? 1 : -1; // front (south) or back (north)
           for (let d = 0; d < dormerCount; d++) {
-            const dx = x + (rand() - 0.5) * w * 0.5;
-            const dz = z + (rand() > 0.5 ? dd / 2 + 0.3 : -dd / 2 - 0.3);
+            const dormerX = x + (rand() - 0.5) * (w * 0.4); // centered within building
+            const dormerZ = z + dormerFace * (dd / 2 + 0.4); // on front/back face
+            const dormerW = 1.2, dormerH = 1.5, dormerD = 0.8;
             // Dormer box
-            const dormerBox = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.5, 0.8), mat);
-            dormerBox.position.set(dx, h + 1.5, dz);
+            const dormerBox = new THREE.Mesh(new THREE.BoxGeometry(dormerW, dormerH, dormerD), mat);
+            dormerBox.position.set(dormerX, h + dormerH / 2 + 0.3, dormerZ);
             sceneAdd("surface", dormerBox);
-            // Dormer roof (small gable)
-            const dormerRoof = new THREE.Mesh(new THREE.ConeGeometry(1.0, 0.7, 4), M.roof);
+            // Dormer roof (small gable perpendicular to main roof)
+            const dormerRoofH = 0.6;
+            const dormerRoof = new THREE.Mesh(new THREE.ConeGeometry(dormerW * 0.9, dormerRoofH, 4), M.roof);
             dormerRoof.rotation.y = Math.PI / 4;
-            dormerRoof.position.set(dx, h + 2.55, dz);
+            dormerRoof.position.set(dormerX, h + dormerH + 0.3 + dormerRoofH / 2, dormerZ);
             sceneAdd("surface", dormerRoof);
-            // Dormer window (glowing)
+            // Dormer window (glowing) - offset by half dormer depth
             const dormerWin = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 1.0), M.window);
-            dormerWin.position.set(dx, h + 1.5, dz + (dz > z ? 0.41 : -0.41));
-            if (dz < z) dormerWin.rotation.y = Math.PI;
+            dormerWin.position.set(dormerX, h + dormerH / 2 + 0.3, dormerZ + dormerFace * (dormerD / 2 + 0.01));
+            if (dormerFace < 0) dormerWin.rotation.y = Math.PI;
             sceneAdd("surface", dormerWin);
           }
         }
-        // Chimneys
+        // Chimneys (positioned within building footprint, not floating)
         const chimneyCount = 1 + Math.floor(rand() * 2);
         for (let c = 0; c < chimneyCount; c++) {
-          const chx = x + (rand() - 0.5) * w * 0.6;
-          const chz = z + (rand() - 0.5) * dd * 0.6;
-          addBox("surface", chx, h + 0.6, chz, 0.5, 2.0 + rand() * 0.8, 0.5, M.brick, false);
+          const chx = x + (rand() - 0.5) * (w * 0.5); // within building bounds
+          const chz = z + (rand() - 0.5) * (dd * 0.5);
+          const chimneyH = 1.8 + rand() * 0.8;
+          const chimneyMesh = new THREE.Mesh(new THREE.BoxGeometry(0.5, chimneyH, 0.5), M.brick);
+          chimneyMesh.position.set(chx, h + chimneyH / 2, chz);
+          sceneAdd("surface", chimneyMesh);
         }
         // Windows with shutters (multiple floors)
         for (let wy = 1.8; wy < h - 1; wy += 2.8) {
-          for (const side of (rand() > 0.5 ? ["south", "north"] as const : ["east", "west"] as const)) {
-            if (rand() > 0.4) continue; // not every floor has every window
-            // Main window
+          // Pick a face for this floor
+          const floorFace = rand() > 0.5 ? "south" : "north";
+          if (rand() > 0.3) {
             const winW = 1.2 + rand() * 0.3;
-            const winH = 1.5 + rand() * 0.3;
+            const winH = 1.4 + rand() * 0.3;
             const win = new THREE.Mesh(new THREE.PlaneGeometry(winW, winH), M.window);
             let wx = x, wz = z;
-            if (side === "south") { wz = z + dd / 2 + 0.03; }
-            else if (side === "north") { wz = z - dd / 2 - 0.03; win.rotation.y = Math.PI; }
-            else if (side === "east") { wx = x + w / 2 + 0.03; win.rotation.y = Math.PI / 2; }
-            else { wx = x - w / 2 - 0.03; win.rotation.y = -Math.PI / 2; }
+            const wallOffset = 0.03;
+            if (floorFace === "south") { wz = z + dd / 2 + wallOffset; }
+            else { wz = z - dd / 2 - wallOffset; win.rotation.y = Math.PI; }
             win.position.set(wx, wy, wz);
             sceneAdd("surface", win);
-            // Shutters (closed or open, randomly)
+            // Shutters (closed on sides of window)
             if (rand() > 0.35) {
               const shutterMat = rand() > 0.5 ? M.timber : M.woodDark;
-              const shutterH = winH - 0.1;
-              const leftShutter = new THREE.Mesh(new THREE.BoxGeometry(0.25, shutterH, 0.05), shutterMat);
-              const rightShutter = new THREE.Mesh(new THREE.BoxGeometry(0.25, shutterH, 0.05), shutterMat);
-              if (side === "south") {
-                leftShutter.position.set(wx - winW / 2 - 0.15, wy, wz + 0.04);
-                rightShutter.position.set(wx + winW / 2 + 0.15, wy, wz + 0.04);
-              } else if (side === "north") {
-                leftShutter.position.set(wx - winW / 2 - 0.15, wy, wz - 0.04);
-                rightShutter.position.set(wx + winW / 2 + 0.15, wy, wz - 0.04);
-              } else if (side === "east") {
-                leftShutter.position.set(wx + 0.04, wy, wz - winW / 2 - 0.15);
-                rightShutter.position.set(wx + 0.04, wy, wz + winW / 2 + 0.15);
-              } else {
-                leftShutter.position.set(wx - 0.04, wy, wz - winW / 2 - 0.15);
-                rightShutter.position.set(wx - 0.04, wy, wz + winW / 2 + 0.15);
-              }
+              const shutterW = 0.2, shutterH = winH;
+              const leftShutter = new THREE.Mesh(new THREE.BoxGeometry(shutterW, shutterH, 0.04), shutterMat);
+              const rightShutter = new THREE.Mesh(new THREE.BoxGeometry(shutterW, shutterH, 0.04), shutterMat);
+              const shutterDepth = floorFace === "south" ? wallOffset + 0.02 : -(wallOffset + 0.02);
+              leftShutter.position.set(wx - winW / 2 - shutterW / 2 - 0.02, wy, wz + shutterDepth);
+              rightShutter.position.set(wx + winW / 2 + shutterW / 2 + 0.02, wy, wz + shutterDepth);
               sceneAdd("surface", leftShutter);
               sceneAdd("surface", rightShutter);
             }
           }
+          // Also add east/west windows sometimes
+          if (rand() > 0.6) {
+            const winW = 1.1 + rand() * 0.25;
+            const winH = 1.3 + rand() * 0.25;
+            const ewFace = rand() > 0.5 ? "east" : "west";
+            const win = new THREE.Mesh(new THREE.PlaneGeometry(winW, winH), M.window);
+            let wx = x, wz = z;
+            if (ewFace === "east") { wx = x + w / 2 + 0.03; win.rotation.y = Math.PI / 2; }
+            else { wx = x - w / 2 - 0.03; win.rotation.y = -Math.PI / 2; }
+            win.position.set(wx, wy, wz);
+            sceneAdd("surface", win);
+          }
         }
-        // Window boxes / flower boxes under windows
-        if (rand() > 0.6) {
-          const face = j > 0 ? "north" : j < 0 ? "south" : i > 0 ? "west" : "east";
-          const boxZ = face === "north" ? z - dd / 2 - 0.12 : face === "south" ? z + dd / 2 + 0.12 : z;
-          const boxX = face === "east" ? x + w / 2 + 0.12 : face === "west" ? x - w / 2 - 0.12 : x;
-          const flowerBox = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.25, 0.25), M.woodDark);
-          flowerBox.position.set(boxX, 1.6, boxZ);
+        // Window boxes / flower boxes under windows (only on front/back)
+        if (rand() > 0.65) {
+          const boxFace = j > 0 ? "north" : "south";
+          const boxZ = boxFace === "north" ? z - dd / 2 - 0.15 : z + dd / 2 + 0.15;
+          const flowerBox = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.22, 0.22), M.woodDark);
+          flowerBox.position.set(x, 1.55, boxZ);
           sceneAdd("surface", flowerBox);
         }
       }
     }
 
     // Fire-burning street lamps along boulevards — 18th-century iron style
-    const lampPostGeo = new THREE.CylinderGeometry(0.06, 0.1, 4.2, 8);
-    const lampArmGeo = new THREE.BoxGeometry(0.6, 0.06, 0.06);
+    const lampPostGeo = new THREE.CylinderGeometry(0.06, 0.1, 4.0, 8);
     const flameGeo = new THREE.ConeGeometry(0.22, 0.55, 6);
     const flameCoreGeo = new THREE.ConeGeometry(0.11, 0.35, 6);
     const flickerLamps: { light: THREE.PointLight | null; base: number; cone: THREE.Mesh; core?: THREE.Mesh }[] = [];
     for (let k = -GRID; k <= GRID; k++) {
       if (k === 0) continue;
       for (const [lx, lz] of [[-5, k * 17], [5, k * 17], [k * 17, -5], [k * 17, 5]] as const) {
-        // Wrought iron post (dark matte)
+        // Wrought iron post
         const post = new THREE.Mesh(lampPostGeo, M.rail);
-        post.position.set(lx, 2.1, lz);
+        post.position.set(lx, 2.0, lz);
         sceneAdd("surface", post);
-        // Decorative bracket arm (curved iron)
-        const arm = new THREE.Mesh(lampArmGeo, M.rail);
-        arm.position.set(lx, 4.15, lz);
-        sceneAdd("surface", arm);
-        // Lantern cage (glass panes implied)
-        const lanternBase = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.08, 0.35), M.rail);
-        lanternBase.position.set(lx, 4.35, lz);
+        // Lantern housing (glass box frame)
+        const lanternH = 0.5;
+        const lanternW = 0.32;
+        const lanternBase = new THREE.Mesh(new THREE.BoxGeometry(lanternW, 0.06, lanternW), M.rail);
+        lanternBase.position.set(lx, 4.06, lz);
         sceneAdd("surface", lanternBase);
-        const lanternTop = new THREE.Mesh(new THREE.ConeGeometry(0.28, 0.22, 4), M.rail);
-        lanternTop.rotation.y = Math.PI / 4;
-        lanternTop.position.set(lx, 4.65, lz);
-        sceneAdd("surface", lanternTop);
-        // Flame
+        // Glass panes (implied by frame corners)
+        const paneGeo = new THREE.BoxGeometry(0.04, lanternH, lanternW);
+        for (const ox of [-lanternW/2 + 0.02, lanternW/2 - 0.02]) {
+          const pane = new THREE.Mesh(paneGeo, M.rail);
+          pane.position.set(lx + ox, 4.06 + lanternH/2, lz);
+          sceneAdd("surface", pane);
+        }
+        const paneGeo2 = new THREE.BoxGeometry(lanternW, lanternH, 0.04);
+        for (const oz of [-lanternW/2 + 0.02, lanternW/2 - 0.02]) {
+          const pane = new THREE.Mesh(paneGeo2, M.rail);
+          pane.position.set(lx, 4.06 + lanternH/2, lz + oz);
+          sceneAdd("surface", pane);
+        }
+        // Lantern cap (pyramidal top)
+        const capH = 0.18;
+        const lanternCap = new THREE.Mesh(new THREE.ConeGeometry(lanternW * 0.8, capH, 4), M.rail);
+        lanternCap.rotation.y = Math.PI / 4;
+        lanternCap.position.set(lx, 4.06 + lanternH + capH/2, lz);
+        sceneAdd("surface", lanternCap);
+        // Flame inside lantern
         const flame = new THREE.Mesh(flameGeo, M.flame);
-        flame.position.set(lx, 4.5, lz);
+        flame.position.set(lx, 4.12, lz);
         sceneAdd("surface", flame);
         const core = new THREE.Mesh(flameCoreGeo, M.flameCore);
-        core.position.set(lx, 4.46, lz);
+        core.position.set(lx, 4.09, lz);
         sceneAdd("surface", core);
-        // Real PointLight only on every 3rd (perf), but ALL flames animate
+        // Real PointLight
         const hasLight = (Math.abs(k) + (lx > 0 ? 0 : 1)) % 3 === 0;
         let pl: THREE.PointLight | null = null;
         if (hasLight) {
           pl = new THREE.PointLight(0xff9030, 1.6, 20);
-          pl.position.set(lx, 4.6, lz);
+          pl.position.set(lx, 4.2, lz);
           sceneAdd("surface", pl);
         }
         flickerLamps.push({ light: pl, base: 1.6, cone: flame, core });
