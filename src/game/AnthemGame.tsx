@@ -124,6 +124,10 @@ export default function AnthemGame() {
   const [puzzleProgress, setPuzzleProgress] = useState(0); // 0..3 for garden pedestals
   const [npcLine, setNpcLine] = useState<{ name: string; line: string } | null>(null);
   const [chase, setChase] = useState<{ active: boolean; timeLeft: number } | null>(null);
+  const [stamina, setStamina] = useState(1);
+  const [exhausted, setExhausted] = useState(false);
+  const [lightParts, setLightParts] = useState(0);
+  const [lightCharge, setLightCharge] = useState(0);
   const mutedRef = useRef(false);
   const masterGainRef = useRef<GainNode | null>(null);
   const hasLanternRef = useRef(false);
@@ -1084,6 +1088,18 @@ export default function AnthemGame() {
       addBox("underground", J / 2, 0, sign * s1, 0.4, JH, side, M.tunnelWall);
       addBox("underground", J / 2, 0, sign * s2, 0.4, JH, side, M.tunnelWall);
     }
+    // Shared underground decoration geometry/materials
+    const archPostGeo = new THREE.BoxGeometry(0.35, JH, 0.35);
+    const chainGeo = new THREE.CylinderGeometry(0.02, 0.02, 0.6, 4);
+    const cageGeo = new THREE.BoxGeometry(0.32, 0.42, 0.32);
+    const rockGeo = new THREE.DodecahedronGeometry(1, 0);
+    const stalGeo = new THREE.ConeGeometry(0.22, 1.4, 5);
+    const puddleGeo = new THREE.CircleGeometry(1.1, 12);
+    const puddleMat = new THREE.MeshStandardMaterial({ color: 0x0e141a, roughness: 0.05, metalness: 0.85 });
+    const mossMat = new THREE.MeshStandardMaterial({ color: 0x2a4a2a, emissive: 0x0a2a10, emissiveIntensity: 0.25, roughness: 1 });
+    const mossGeo = new THREE.CircleGeometry(0.8, 8);
+    const tunnelFlicker: THREE.PointLight[] = [];
+
     // Corridor builder — closed box: floor, ceiling, two solid walls, capped at far end
     const buildCorridor = (
       fromX: number, fromZ: number, toX: number, toZ: number,
@@ -1147,21 +1163,91 @@ export default function AnthemGame() {
         rail.rotation.y = -angle;
         sceneAdd("underground", rail);
       }
-      // lanterns (emissive only, with sparse PointLights)
+      // timber support arches — posts + lintel every ~9 units (mine-shaft look)
+      const archCount = Math.max(1, Math.floor(len / 9));
+      for (let i = 0; i < archCount; i++) {
+        const at = -len / 2 + (i + 0.5) * (len / archCount);
+        const ax2 = cx + Math.cos(angle) * at;
+        const az2 = cz + Math.sin(angle) * at;
+        for (const sgn of [-1, 1]) {
+          const post = new THREE.Mesh(archPostGeo, M.timber);
+          post.position.set(ax2 + nx * (width / 2 - 0.35) * sgn, height / 2 - 0.15, az2 + nz * (width / 2 - 0.35) * sgn);
+          post.rotation.y = -angle;
+          sceneAdd("underground", post);
+        }
+        const lintel = new THREE.Mesh(new THREE.BoxGeometry(width - 0.3, 0.35, 0.4), M.woodDark);
+        lintel.position.set(ax2, height - 0.35, az2);
+        lintel.rotation.y = -angle + Math.PI / 2;
+        sceneAdd("underground", lintel);
+      }
+      // hanging iron lanterns on chains
       const lanternCount = Math.max(1, Math.floor(len / 18));
       for (let i = 0; i < lanternCount; i++) {
-        const tx = -len / 2 + (i + 0.5) * (len / lanternCount);
-        const lx = cx + Math.cos(angle) * tx;
-        const lz = cz + Math.sin(angle) * tx;
+        const lt = -len / 2 + (i + 0.5) * (len / lanternCount);
+        const lx = cx + Math.cos(angle) * lt;
+        const lz = cz + Math.sin(angle) * lt;
+        const chain = new THREE.Mesh(chainGeo, M.bedFrame);
+        chain.position.set(lx, height - 0.3, lz);
+        sceneAdd("underground", chain);
+        const cage = new THREE.Mesh(cageGeo, M.ironGrate);
+        cage.position.set(lx, height - 0.75, lz);
+        sceneAdd("underground", cage);
         const lan = new THREE.Mesh(G.lamp, M.lantern);
-        lan.position.set(lx, height - 0.5, lz);
+        lan.scale.setScalar(0.65);
+        lan.position.set(lx, height - 0.75, lz);
         sceneAdd("underground", lan);
         // only every other lantern gets a real light
         if (i % 2 === 0) {
           const pl = new THREE.PointLight(0xffaa55, 1.3, 22);
-          pl.position.set(lx, height - 0.5, lz);
+          pl.position.set(lx, height - 0.75, lz);
           sceneAdd("underground", pl);
+          tunnelFlicker.push(pl);
         }
+      }
+      // scattered rubble along the walls
+      for (let i = 0; i < Math.floor(len / 7); i++) {
+        const rt = -len / 2 + rand() * len;
+        const sgn = rand() > 0.5 ? 1 : -1;
+        const rx = cx + Math.cos(angle) * rt + nx * (width / 2 - 0.6 - rand() * 0.5) * sgn;
+        const rz = cz + Math.sin(angle) * rt + nz * (width / 2 - 0.6 - rand() * 0.5) * sgn;
+        const rock = new THREE.Mesh(rockGeo, M.stone3);
+        const s = 0.15 + rand() * 0.35;
+        rock.scale.setScalar(s);
+        rock.position.set(rx, s * 0.5, rz);
+        rock.rotation.set(rand() * 3, rand() * 3, rand() * 3);
+        sceneAdd("underground", rock);
+      }
+      // stalactites
+      for (let i = 0; i < Math.floor(len / 12); i++) {
+        const st = -len / 2 + rand() * len;
+        const sx = cx + Math.cos(angle) * st + nx * (rand() - 0.5) * (width - 1.5);
+        const sz = cz + Math.sin(angle) * st + nz * (rand() - 0.5) * (width - 1.5);
+        const stal = new THREE.Mesh(stalGeo, M.tunnelWall);
+        stal.position.set(sx, height - 0.5, sz);
+        stal.rotation.x = Math.PI;
+        stal.scale.setScalar(0.6 + rand() * 0.8);
+        sceneAdd("underground", stal);
+      }
+      // shallow puddles catching the lantern light
+      if (rand() > 0.4) {
+        const pt = -len / 2 + rand() * len;
+        const puddle = new THREE.Mesh(puddleGeo, puddleMat);
+        puddle.rotation.x = -Math.PI / 2;
+        puddle.position.set(cx + Math.cos(angle) * pt + nx * (rand() - 0.5), 0.035, cz + Math.sin(angle) * pt + nz * (rand() - 0.5));
+        puddle.scale.setScalar(0.7 + rand() * 1.2);
+        sceneAdd("underground", puddle);
+      }
+      // moss patches on the walls
+      for (let i = 0; i < Math.floor(len / 16); i++) {
+        const mt = -len / 2 + rand() * len;
+        const sgn = rand() > 0.5 ? 1 : -1;
+        const mx = cx + Math.cos(angle) * mt + nx * (width / 2 - 0.25) * sgn;
+        const mz = cz + Math.sin(angle) * mt + nz * (width / 2 - 0.25) * sgn;
+        const moss = new THREE.Mesh(mossGeo, mossMat);
+        moss.position.set(mx, 0.6 + rand() * 1.8, mz);
+        moss.rotation.y = Math.atan2(nx * -sgn, nz * -sgn);
+        moss.scale.set(0.6 + rand(), 0.4 + rand() * 0.6, 1);
+        sceneAdd("underground", moss);
       }
     };
 
@@ -1211,35 +1297,90 @@ export default function AnthemGame() {
       new THREE.MeshStandardMaterial({ color: 0xb08838, metalness: 0.85, roughness: 0.3 }));
     socket.position.set(CHX, 1.32, CHZ - 2);
     sceneAdd("underground", socket);
-    // Glass bulb (the "light without fire")
-    const lightBox = new THREE.Mesh(new THREE.SphereGeometry(0.28, 20, 16),
-      new THREE.MeshStandardMaterial({
-        color: 0xfff8dd, emissive: 0xfff0aa, emissiveIntensity: 2.2,
-        transparent: true, opacity: 0.85, roughness: 0.1, metalness: 0.1,
-      }));
+    // Glass bulb (the "light without fire") — dark until you BUILD it
+    const bulbMat = new THREE.MeshStandardMaterial({
+      color: 0xfff8dd, emissive: 0xfff0aa, emissiveIntensity: 0,
+      transparent: true, opacity: 0.85, roughness: 0.1, metalness: 0.1,
+    });
+    const lightBox = new THREE.Mesh(new THREE.SphereGeometry(0.28, 20, 16), bulbMat);
     lightBox.position.set(CHX, 1.68, CHZ - 2);
+    lightBox.visible = false;
     sceneAdd("underground", lightBox);
     // Filament (thin bright wire loop)
-    const filament = new THREE.Mesh(new THREE.TorusGeometry(0.09, 0.008, 6, 16),
-      new THREE.MeshBasicMaterial({ color: 0xfff4c0 }));
+    const filamentMat = new THREE.MeshBasicMaterial({ color: 0x443322 });
+    const filament = new THREE.Mesh(new THREE.TorusGeometry(0.09, 0.008, 6, 16), filamentMat);
     filament.position.set(CHX, 1.68, CHZ - 2);
     filament.rotation.x = Math.PI / 2;
+    filament.visible = false;
     sceneAdd("underground", filament);
     // Copper wires trailing from base to a small battery/jar
     const jar = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.5, 10),
       new THREE.MeshStandardMaterial({ color: 0x8a9aa8, metalness: 0.7, roughness: 0.3, transparent: true, opacity: 0.6 }));
     jar.position.set(CHX + 0.7, 1.15, CHZ - 2);
+    jar.visible = false;
     sceneAdd("underground", jar);
+    const wires: THREE.Mesh[] = [];
     for (let w = 0; w < 2; w++) {
       const wire = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.7, 6),
         new THREE.MeshStandardMaterial({ color: 0xb87a3a, metalness: 0.8, roughness: 0.4 }));
       wire.position.set(CHX + 0.35, 1.15 + (w === 0 ? 0.15 : -0.05), CHZ - 2);
       wire.rotation.z = Math.PI / 2;
+      wire.visible = false;
       sceneAdd("underground", wire);
+      wires.push(wire);
     }
-    const lbLight = new THREE.PointLight(0xffeeaa, 3.5, 40);
+    const lbLight = new THREE.PointLight(0xffeeaa, 0, 40);
     lbLight.position.set(CHX, 2.4, CHZ - 2);
     sceneAdd("underground", lbLight);
+
+    // Hand-crank dynamo beside the bench — you spin this to charge the light
+    const dynamoBase = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.9, 0.8), M.stone3);
+    dynamoBase.position.set(CHX + 2.2, 0.45, CHZ - 2);
+    sceneAdd("underground", dynamoBase);
+    const crankWheel = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.06, 8, 20),
+      new THREE.MeshStandardMaterial({ color: 0x8a7a5a, metalness: 0.85, roughness: 0.3 }));
+    crankWheel.position.set(CHX + 2.2, 1.25, CHZ - 2);
+    crankWheel.rotation.y = Math.PI / 2;
+    sceneAdd("underground", crankWheel);
+    const crankHandle = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.3, 6),
+      new THREE.MeshStandardMaterial({ color: 0x5a3a20, roughness: 0.8 }));
+    crankHandle.position.set(0, 0.42, 0);
+    crankWheel.add(crankHandle);
+
+    // THE LIGHT — build state. Find 3 parts in the dead-end tunnels, mount
+    // them on the bench, then crank the dynamo until the filament catches.
+    const lightBuild = { parts: 0, assembled: false, charge: 0, lit: false, cranking: false };
+    type LightPart = { name: string; pos: THREE.Vector3; mesh: THREE.Object3D; taken: boolean };
+    const lightPartsArr: LightPart[] = [];
+    const makePart = (name: string, x: number, z: number, build: (g: THREE.Group) => void) => {
+      const g = new THREE.Group();
+      build(g);
+      const glow = new THREE.Mesh(new THREE.SphereGeometry(0.5, 8, 8),
+        new THREE.MeshBasicMaterial({ color: 0x80c0ff, transparent: true, opacity: 0.15 }));
+      g.add(glow);
+      g.position.set(x, 1.0, z);
+      sceneAdd("underground", g);
+      lightPartsArr.push({ name, pos: new THREE.Vector3(x, 1.0, z), mesh: g, taken: false });
+    };
+    // glass bulb — south dead end
+    makePart("a blown glass globe", 0, 66, (g) => {
+      const b = new THREE.Mesh(new THREE.SphereGeometry(0.24, 14, 10),
+        new THREE.MeshStandardMaterial({ color: 0xcfe8f0, transparent: true, opacity: 0.7, roughness: 0.1 }));
+      g.add(b);
+    });
+    // copper coil — west dead end
+    makePart("a coil of copper wire", -106, 0, (g) => {
+      const c = new THREE.Mesh(new THREE.TorusGeometry(0.2, 0.05, 8, 16),
+        new THREE.MeshStandardMaterial({ color: 0xb87a3a, metalness: 0.85, roughness: 0.35 }));
+      c.rotation.x = Math.PI / 2;
+      g.add(c);
+    });
+    // storm jar — east dead end
+    makePart("a jar that holds lightning", 106, 0, (g) => {
+      const j = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.42, 10),
+        new THREE.MeshStandardMaterial({ color: 0x8a9aa8, metalness: 0.7, roughness: 0.3, transparent: true, opacity: 0.65 }));
+      g.add(j);
+    });
 
 
     // Stair pad back to the surface — placed in the junction
@@ -1718,7 +1859,7 @@ export default function AnthemGame() {
     const interactables: Interactable[] = [
       { beatId: "start", position: new THREE.Vector3(11, 1, -2), label: "Take the parchment", order: 0, sceneKey: "dorm" },
       // order 1 = grate (special-cased)
-      { beatId: "tunnel_light", position: new THREE.Vector3(CHX, 1, CHZ - 2), label: "Touch the light without fire", order: 2, sceneKey: "underground" },
+
       { beatId: "field_meet", position: liberty.position.clone(), label: "Approach the Golden One", order: 3, sceneKey: "surface" },
       { beatId: "council", position: new THREE.Vector3(0, 1, 0), label: "Present the light to the Council", order: 4, sceneKey: "council" },
       { beatId: "forest", position: new THREE.Vector3(FOREST_X, 1, FOREST_Z), label: "Enter the Uncharted Forest", order: 5, sceneKey: "surface" },
@@ -1729,7 +1870,7 @@ export default function AnthemGame() {
     const OBJECTIVES = [
       "Take the parchment from beneath your cot",
       "Step outside — find the iron grating east of the city",
-      "Descend into the tunnel — find the glowing box",
+      "Descend into the tunnel — scavenge parts and BUILD the light",
       "Climb out — cross the south wall to meet the Golden One",
       "Return to the Council Hall — present the light",
       "Flee west — enter the Uncharted Forest",
@@ -1837,8 +1978,8 @@ export default function AnthemGame() {
       // Guards spawn tight against the council doorway, behind the fleeing player.
       for (let i = 0; i < 3; i++) {
         const g = new THREE.Group();
-        const body = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.55, 1.9, 10),
-          new THREE.MeshStandardMaterial({ color: 0x502010, roughness: 0.85 }));
+        const bodyMat = new THREE.MeshStandardMaterial({ color: 0x502010, roughness: 0.85, emissive: 0x000000, emissiveIntensity: 0.6 });
+        const body = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.55, 1.9, 10), bodyMat);
         body.position.y = 0.95; g.add(body);
         const head = new THREE.Mesh(new THREE.SphereGeometry(0.3, 12, 10),
           new THREE.MeshStandardMaterial({ color: 0x2a1a0a }));
@@ -1846,10 +1987,24 @@ export default function AnthemGame() {
         const spear = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 2.6, 6),
           new THREE.MeshStandardMaterial({ color: 0x3a2a18 }));
         spear.position.set(0.5, 1.2, 0); g.add(spear);
+        // Vision cone hint — a faint translucent wedge at eye height
+        const cone = new THREE.Mesh(new THREE.ConeGeometry(2.2, 6, 3, 1, true),
+          new THREE.MeshBasicMaterial({ color: 0xffcc44, transparent: true, opacity: 0.07, side: THREE.DoubleSide, depthWrite: false }));
+        cone.rotation.x = -Math.PI / 2;
+        cone.position.set(0, 1.8, 3);
+        g.add(cone);
         // Spawn AT the council door, well behind the player's spawn point.
         g.position.set(COUNCIL_CX + (i - 1) * 3, 0, COUNCIL_CZ + 19);
         sceneAdd("surface", g);
-        chaseState.guards.push({ mesh: g, pos: g.position.clone() });
+        chaseState.guards.push({
+          mesh: g, pos: g.position.clone(),
+          state: "seek",
+          lastSeen: new THREE.Vector3(camera.position.x, 0, camera.position.z),
+          searchT: 0, searchDir: Math.random() * Math.PI * 2,
+          bodyMat,
+          home: g.position.clone(),
+          avoidT: 0, avoidSign: 1,
+        });
       }
     };
     const startChase = () => {
@@ -1935,6 +2090,56 @@ export default function AnthemGame() {
 
 
 
+
+      // UNDERGROUND — building the light
+      if (currentScene === "underground" && !lightBuild.lit) {
+        // scavenge parts
+        for (const part of lightPartsArr) {
+          if (part.taken) continue;
+          if (localP.distanceTo(part.pos) < 2.2) {
+            part.taken = true;
+            part.mesh.visible = false;
+            lightBuild.parts += 1;
+            setLightParts(lightBuild.parts);
+            sfx.interact();
+            setNpcLine({ name: "—", line: `You take ${part.name}. (${lightBuild.parts}/3 parts)` });
+            return;
+          }
+        }
+        const benchPos = new THREE.Vector3(CHX, 1, CHZ - 2);
+        const dynamoPos = new THREE.Vector3(CHX + 2.2, 1, CHZ - 2);
+        // assemble at the bench
+        if (!lightBuild.assembled && localP.distanceTo(benchPos) < 2.4) {
+          if (lightBuild.parts < 3) {
+            setNpcLine({ name: "—", line: `The bench waits. You need parts from the dead-end tunnels — glass, copper, and a jar of lightning. (${lightBuild.parts}/3)` });
+            return;
+          }
+          lightBuild.assembled = true;
+          lightBox.visible = true;
+          filament.visible = true;
+          jar.visible = true;
+          for (const w of wires) w.visible = true;
+          sfx.metal();
+          setNpcLine({ name: "—", line: "Glass seated. Copper wound. Wires bound to the jar. Now — turn the crank. Turn it until the wire catches." });
+          return;
+        }
+        // crank the dynamo — press E repeatedly to build charge
+        if (lightBuild.assembled && localP.distanceTo(dynamoPos) < 2.6) {
+          lightBuild.cranking = true;
+          lightBuild.charge = Math.min(1, lightBuild.charge + 0.13);
+          setLightCharge(lightBuild.charge);
+          blip(120 + lightBuild.charge * 320, 0.1, "sawtooth", 0.12, 0.2);
+          if (lightBuild.charge >= 1) {
+            lightBuild.lit = true;
+            filamentMat.color.set(0xfff4c0);
+            sfx.bell();
+            const beat = STORY.find(b => b.id === "tunnel_light")!;
+            setActiveBeat(beat); activeBeatRef.current = beat;
+            advanceTo(3);
+          }
+          return;
+        }
+      }
 
       // PICKUPS first — they're small and easy to miss
       for (const pk of pickups) {
@@ -2080,7 +2285,95 @@ export default function AnthemGame() {
     let stepAccum = 0;
 
     // Chase-scene state
-    const chaseState = { active: false, timeLeft: 0, headStart: 0, guards: [] as { mesh: THREE.Group; pos: THREE.Vector3 }[] };
+    type GuardState = "chase" | "seek" | "search" | "patrol";
+    type Guard = {
+      mesh: THREE.Group;
+      pos: THREE.Vector3;
+      state: GuardState;
+      lastSeen: THREE.Vector3 | null;
+      searchT: number;
+      searchDir: number;
+      bodyMat: THREE.MeshStandardMaterial;
+      home: THREE.Vector3;
+      avoidT: number;
+      avoidSign: number;
+    };
+    const chaseState = { active: false, timeLeft: 0, headStart: 0, hadContact: false, guards: [] as Guard[] };
+    // Sprint stamina
+    const sprint = { value: 1, exhausted: false };
+    // Line-of-sight test against the surface colliders (walls, trees, buildings)
+    const losRay = new THREE.Ray();
+    const losHit = new THREE.Vector3();
+    const losDir = new THREE.Vector3();
+    const losBlocked = (from: THREE.Vector3, to: THREE.Vector3) => {
+      losDir.subVectors(to, from);
+      const dist = losDir.length();
+      losDir.normalize();
+      losRay.origin.copy(from);
+      losRay.direction.copy(losDir);
+      for (const c of colliderSets.surface) {
+        const hit = losRay.intersectBox(c.box, losHit);
+        if (hit && hit.distanceTo(from) < dist - 0.4) return true;
+      }
+      return false;
+    };
+    // Guard collision probe — same AABB test the player uses
+    const guardBlockedAt = (x: number, z: number) => {
+      const b = new THREE.Box3(
+        new THREE.Vector3(x - 0.45, 0.1, z - 0.45),
+        new THREE.Vector3(x + 0.45, 2, z + 0.45),
+      );
+      return colliderSets.surface.some(c => c.box.intersectsBox(b));
+    };
+    // Steer a guard toward a target with obstacle avoidance: try the direct
+    // heading, then progressively rotated headings (left/right whiskers).
+    const guardStep = (g: Guard, target: THREE.Vector3, spd: number, dt: number) => {
+      const dx = target.x - g.mesh.position.x;
+      const dz = target.z - g.mesh.position.z;
+      const dist = Math.hypot(dx, dz);
+      if (dist < 0.2) return dist;
+      const baseAng = Math.atan2(dx, dz);
+      const step = spd * dt;
+      const tryAngles = g.avoidT > 0
+        ? [baseAng + g.avoidSign * 0.9, baseAng + g.avoidSign * 1.5, baseAng, baseAng - g.avoidSign * 0.9]
+        : [baseAng, baseAng + 0.5, baseAng - 0.5, baseAng + 1.1, baseAng - 1.1, baseAng + 1.8, baseAng - 1.8];
+      for (const a of tryAngles) {
+        const nx = g.mesh.position.x + Math.sin(a) * step;
+        const nz = g.mesh.position.z + Math.cos(a) * step;
+        if (!guardBlockedAt(nx, nz)) {
+          if (a !== baseAng && g.avoidT <= 0) {
+            g.avoidT = 0.6;
+            g.avoidSign = a > baseAng ? 1 : -1;
+          }
+          g.mesh.position.x = nx;
+          g.mesh.position.z = nz;
+          g.mesh.rotation.y = a;
+          return dist;
+        }
+      }
+      return dist;
+    };
+    // Can this guard see the player? Vision cone + range, shorter if the
+    // player crouches; close-range hearing works regardless of facing.
+    const guardSees = (g: Guard, crouching: boolean) => {
+      const gx = g.mesh.position.x, gz = g.mesh.position.z;
+      const px = camera.position.x, pz = camera.position.z;
+      const dx = px - gx, dz = pz - gz;
+      const dist = Math.hypot(dx, dz);
+      const hearR = crouching ? 3 : 7;
+      const range = crouching ? 22 : 42;
+      if (dist < hearR) return true;
+      if (dist > range) return false;
+      const facing = g.mesh.rotation.y;
+      const angTo = Math.atan2(dx, dz);
+      let diff = angTo - facing;
+      while (diff > Math.PI) diff -= Math.PI * 2;
+      while (diff < -Math.PI) diff += Math.PI * 2;
+      if (Math.abs(diff) > 1.1) return false; // ~126° cone
+      const eye = new THREE.Vector3(gx, 1.8, gz);
+      const head = new THREE.Vector3(px, crouching ? 1.0 : 1.6, pz);
+      return !losBlocked(eye, head);
+    };
     const councilCutscene = { active: false, step: 0, timer: 0 };
     // Surface-material footstep pickers
     const surfaceKind = (): "cobble" | "grass" | "wood" | "stone" | "dirt" => {
@@ -2125,8 +2418,26 @@ export default function AnthemGame() {
         if (keys["KeyD"]) move.add(tmpRight);
         if (keys["KeyA"]) move.sub(tmpRight);
       }
-      const speed = keys["ShiftLeft"] || keys["ShiftRight"] ? 14 : 7;
-      if (move.lengthSq() > 0) move.normalize().multiplyScalar(speed * dt);
+      // Sprint stamina — drains while sprinting, refills at rest. Fully
+      // draining it locks sprint out until the bar refills completely.
+      const sprintHeld = !!(keys["ShiftLeft"] || keys["ShiftRight"]);
+      const wantsMove = move.lengthSq() > 0;
+      let sprinting = false;
+      if (sprintHeld && wantsMove && !sprint.exhausted && sprint.value > 0) {
+        sprinting = true;
+        sprint.value -= dt / 4.0;
+        if (sprint.value <= 0) {
+          sprint.value = 0;
+          sprint.exhausted = true;
+          noiseBurst(0.4, 300, 2, 0.2, 0.2); // gasp
+        }
+      } else {
+        sprint.value = Math.min(1, sprint.value + dt / 6.0);
+        if (sprint.value >= 1 && sprint.exhausted) sprint.exhausted = false;
+      }
+      if (frame % 6 === 0) { setStamina(sprint.value); setExhausted(sprint.exhausted); }
+      const speed = sprinting ? 14 : 7;
+      if (wantsMove) move.normalize().multiplyScalar(speed * dt);
       velocity.lerp(move, 0.4);
 
       const activeColliders = colliderSets[currentScene];
@@ -2156,7 +2467,7 @@ export default function AnthemGame() {
       const horizSpeed = Math.hypot(velocity.x, velocity.z);
       if (onGround && horizSpeed > 0.02 && !crouching) {
         stepAccum += horizSpeed;
-        const cadence = (keys["ShiftLeft"] || keys["ShiftRight"]) ? 0.55 : 0.85;
+        const cadence = sprinting ? 0.55 : 0.85;
         if (stepAccum > cadence) {
           stepAccum = 0;
           doFootstep();
@@ -2181,28 +2492,75 @@ export default function AnthemGame() {
         onGround = true;
       }
 
-      // Chase logic — guards seek the player on surface; win by descending grate
+      // Chase logic — guards hunt with vision + pathfinding; win by descending
+      // the grate, or shake them by breaking line of sight until they give up
       if (chaseState.active && currentScene === "surface") {
         chaseState.timeLeft -= dt;
         if (chaseState.headStart > 0) chaseState.headStart -= dt;
         if (frame % 10 === 0) setChase({ active: true, timeLeft: Math.max(0, chaseState.timeLeft) });
         const guardsMove = chaseState.headStart <= 0;
+        // Guards run faster than your walk (7) but slower than your sprint (14)
+        const GUARD_SPEED = 9.5;
+        const doVision = frame % 6 === 0;
+        let anyHunting = false;
         for (const g of chaseState.guards) {
-          if (guardsMove) {
-            const dir = new THREE.Vector3(camera.position.x - g.mesh.position.x, 0, camera.position.z - g.mesh.position.z);
-            const dist = dir.length();
-            if (dist > 0.1) dir.normalize().multiplyScalar(dt * 4.8);
-            g.mesh.position.x += dir.x; g.mesh.position.z += dir.z;
-            g.mesh.rotation.y = Math.atan2(dir.x, dir.z);
-            if (dist < 1.3) {
-              // Caught → reset player far in front of council with fresh head-start
-              camera.position.set(COUNCIL_CX, 1.7, COUNCIL_CZ + 40);
-              chaseState.headStart = 2.0;
-              for (let i = 0; i < chaseState.guards.length; i++) {
-                chaseState.guards[i].mesh.position.set(COUNCIL_CX + (i - 1) * 3, 0, COUNCIL_CZ + 19);
-              }
-              setNpcLine({ name: "Guard", line: "Halt! (You have been caught — try again.)" });
+          if (!guardsMove) continue;
+          if (g.avoidT > 0) g.avoidT -= dt;
+          // --- perception ---
+          if (doVision) {
+            if (guardSees(g, crouching)) {
+              if (g.state !== "chase") sfx.metal();
+              g.state = "chase";
+              g.lastSeen = new THREE.Vector3(camera.position.x, 0, camera.position.z);
+              g.searchT = 0;
+            } else if (g.state === "chase") {
+              g.state = "seek"; // lost sight — run to last known position
             }
+          }
+          // --- behavior ---
+          if (g.state === "chase") {
+            g.lastSeen = new THREE.Vector3(camera.position.x, 0, camera.position.z);
+            guardStep(g, g.lastSeen, GUARD_SPEED, dt);
+          } else if (g.state === "seek" && g.lastSeen) {
+            const d = guardStep(g, g.lastSeen, GUARD_SPEED * 0.9, dt);
+            if (d < 1.5) { g.state = "search"; g.searchT = 6; g.searchDir = Math.random() * Math.PI * 2; }
+          } else if (g.state === "search") {
+            g.searchT -= dt;
+            g.searchDir += dt * 1.6; // sweep the area, scanning around
+            const sx = g.mesh.position.x + Math.sin(g.searchDir) * 3;
+            const sz = g.mesh.position.z + Math.cos(g.searchDir) * 3;
+            guardStep(g, new THREE.Vector3(sx, 0, sz), GUARD_SPEED * 0.4, dt);
+            if (g.searchT <= 0) { g.state = "patrol"; g.lastSeen = null; }
+          } else {
+            // patrol — trudge back toward the council doorway
+            guardStep(g, g.home, GUARD_SPEED * 0.5, dt);
+          }
+          if (g.state === "chase" || g.state === "seek") anyHunting = true;
+          // alert glow: red while hunting, dark when they've lost you
+          g.bodyMat.emissive.set(g.state === "chase" ? 0x801010 : g.state === "seek" || g.state === "search" ? 0x604010 : 0x000000);
+          // --- caught? ---
+          const distP = Math.hypot(camera.position.x - g.mesh.position.x, camera.position.z - g.mesh.position.z);
+          if (g.state === "chase" && distP < 1.3) {
+            // Caught → reset player far in front of council with fresh head-start
+            camera.position.set(COUNCIL_CX, 1.7, COUNCIL_CZ + 40);
+            chaseState.headStart = 2.0;
+            chaseState.hadContact = false;
+            for (let i = 0; i < chaseState.guards.length; i++) {
+              const gi = chaseState.guards[i];
+              gi.mesh.position.set(COUNCIL_CX + (i - 1) * 3, 0, COUNCIL_CZ + 19);
+              gi.state = "seek";
+              gi.lastSeen = new THREE.Vector3(COUNCIL_CX, 0, COUNCIL_CZ + 40);
+              gi.searchT = 0;
+            }
+            setNpcLine({ name: "Guard", line: "Halt! (You have been caught — try again.)" });
+            break;
+          }
+        }
+        if (guardsMove) {
+          if (anyHunting) chaseState.hadContact = true;
+          else if (chaseState.hadContact) {
+            chaseState.hadContact = false;
+            setNpcLine({ name: "—", line: "The shouts fade behind you. You have lost them — stay out of their sight." });
           }
         }
         const dg2 = Math.hypot(camera.position.x - GRATE_X, camera.position.z - GRATE_Z);
@@ -2242,11 +2600,32 @@ export default function AnthemGame() {
 
       // bobs
       const t = now / 600;
-      lightBox.position.y = 1.68 + Math.sin(t) * 0.02;
-      filament.position.y = 1.68 + Math.sin(t) * 0.02;
-      lbLight.intensity = 3.4 + Math.sin(t * 3) * 0.2 + (Math.random() - 0.5) * 0.15;
-
-      lightBox.rotation.y += dt * 0.6;
+      // The light — glow tracks the dynamo charge; decays if you stop cranking
+      if (lightBuild.assembled && !lightBuild.lit && lightBuild.charge > 0) {
+        lightBuild.charge = Math.max(0, lightBuild.charge - dt * 0.045);
+        if (frame % 6 === 0) setLightCharge(lightBuild.charge);
+      }
+      const glowLvl = lightBuild.lit ? 1 : lightBuild.charge;
+      bulbMat.emissiveIntensity = glowLvl * 2.2 + (lightBuild.lit ? Math.sin(t * 3) * 0.2 : 0);
+      lbLight.intensity = glowLvl * 3.4 + (lightBuild.lit ? Math.sin(t * 3) * 0.2 + (Math.random() - 0.5) * 0.15 : 0);
+      crankWheel.rotation.x += dt * glowLvl * 9;
+      if (lightBuild.lit) {
+        lightBox.position.y = 1.68 + Math.sin(t) * 0.02;
+        filament.position.y = 1.68 + Math.sin(t) * 0.02;
+        lightBox.rotation.y += dt * 0.6;
+      }
+      // tunnel lantern flicker
+      if (currentScene === "underground") {
+        for (const pl of tunnelFlicker) {
+          pl.intensity = 1.25 + Math.sin(now * 0.011 + pl.position.x + pl.position.z) * 0.2 + (Math.random() - 0.5) * 0.12;
+        }
+      }
+      // uncollected light parts bob and spin
+      for (const part of lightPartsArr) {
+        if (part.taken) continue;
+        part.mesh.rotation.y += dt * 1.4;
+        part.mesh.position.y = 1.0 + Math.sin(t * 2 + part.pos.x) * 0.08;
+      }
       bookGroup.position.y = 1.5 + Math.sin(t * 0.8) * 0.07;
       bookGroup.rotation.y += dt * 0.3;
       parchment.rotation.y += dt * 0.4;
@@ -2277,6 +2656,20 @@ export default function AnthemGame() {
       else if (currentScene === "council" && localPos.distanceTo(councilExit.position) < 2.5) near = "Leave the Council Hall";
       else if (currentScene === "house" && localPos.distanceTo(houseExit.position) < 2.5) near = "Leave the house";
       else if (currentScene === "underground" && localPos.distanceTo(stair.position) < 2.5) near = "Climb back to the surface";
+      else if (currentScene === "underground" && !lightBuild.lit) {
+        for (const part of lightPartsArr) {
+          if (!part.taken && localPos.distanceTo(part.pos) < 2.2) { near = `Take ${part.name}`; break; }
+        }
+        if (!near) {
+          const benchPos = new THREE.Vector3(CHX, 1, CHZ - 2);
+          const dynamoPos = new THREE.Vector3(CHX + 2.2, 1, CHZ - 2);
+          if (!lightBuild.assembled && localPos.distanceTo(benchPos) < 2.4) {
+            near = lightBuild.parts < 3 ? `Inspect the workbench (${lightBuild.parts}/3 parts)` : "Assemble the light";
+          } else if (lightBuild.assembled && localPos.distanceTo(dynamoPos) < 2.6) {
+            near = "Turn the crank — press E rapidly!";
+          }
+        }
+      }
       else if (currentScene === "surface") {
         const dg = localPos.distanceTo(new THREE.Vector3(GRATE_X, 1, GRATE_Z));
         if (dg < 5) {
@@ -2424,7 +2817,7 @@ export default function AnthemGame() {
             </p>
             <div className="text-xs text-[#8a7a5a] grid grid-cols-2 gap-2 max-w-sm mx-auto pt-2">
               <div><span className="text-[#e8dcc0]">WASD</span> — walk</div>
-              <div><span className="text-[#e8dcc0]">Shift</span> — run</div>
+              <div><span className="text-[#e8dcc0]">Shift</span> — sprint (drains stamina)</div>
               <div><span className="text-[#e8dcc0]">Space</span> — jump</div>
               <div><span className="text-[#e8dcc0]">Mouse</span> — look</div>
               <div><span className="text-[#e8dcc0]">Ctrl / C</span> — crouch</div>
@@ -2456,7 +2849,29 @@ export default function AnthemGame() {
               </span>
               <span className="text-[#e8c870]">✦ Fragments {fragments}/5</span>
               <span className="text-[#c8e870]">✦ Pedestals {puzzleProgress}/3</span>
+              {progress === 2 && <span className="text-[#8ac8e8]">⚙ Parts {lightParts}/3</span>}
             </div>
+            {/* Stamina bar */}
+            <div className="pt-2 w-40">
+              <div className="text-[9px] uppercase tracking-widest pb-0.5" style={{ color: exhausted ? "#e05040" : "#8a7a5a" }}>
+                {exhausted ? "Exhausted" : "Stamina"}
+              </div>
+              <div className="h-1.5 w-full bg-black/60 border border-[#c8a84a]/30">
+                <div
+                  className="h-full transition-[width] duration-150"
+                  style={{ width: `${Math.round(stamina * 100)}%`, background: exhausted ? "#e05040" : "#c8a84a" }}
+                />
+              </div>
+            </div>
+            {/* Light charge bar — only while building the light */}
+            {progress === 2 && lightCharge > 0 && (
+              <div className="pt-1 w-40">
+                <div className="text-[9px] uppercase tracking-widest text-[#8ac8e8] pb-0.5">Dynamo charge</div>
+                <div className="h-1.5 w-full bg-black/60 border border-[#8ac8e8]/30">
+                  <div className="h-full bg-[#8ac8e8] transition-[width] duration-150" style={{ width: `${Math.round(lightCharge * 100)}%` }} />
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Compass — a translating ribbon with duplicated letters */}
