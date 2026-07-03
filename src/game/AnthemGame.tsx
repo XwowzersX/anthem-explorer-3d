@@ -802,8 +802,9 @@ export default function AnthemGame() {
     // Gate posts flush against wall ends
     addBox("surface", -10.5, 0, GATE_Z, 1.4, 5.2, 1.4, M.pillarDark);
     addBox("surface",  10.5, 0, GATE_Z, 1.4, 5.2, 1.4, M.pillarDark);
-    // Lintel
-    addBox("surface", 0, 0, GATE_Z, 22, 0.8, 0.8, M.woodDark);
+    // Raised lintel above head height. It is decorative only so it cannot leave
+    // a hidden floor-level blocker after the portcullis opens.
+    addBox("surface", 0, 4.8, GATE_Z, 22, 0.8, 0.8, M.woodDark, false);
     // Gate itself — a wooden portcullis, 20 wide to fully fill the opening
     const gateMesh = new THREE.Mesh(new THREE.BoxGeometry(20, 4, 0.4),
       new THREE.MeshStandardMaterial({ color: 0x3a2618, roughness: 0.85, metalness: 0.1 }));
