@@ -2079,7 +2079,7 @@ export default function AnthemGame() {
     let stepAccum = 0;
 
     // Chase-scene state
-    const chaseState = { active: false, timeLeft: 0, guards: [] as { mesh: THREE.Group; pos: THREE.Vector3 }[] };
+    const chaseState = { active: false, timeLeft: 0, headStart: 0, guards: [] as { mesh: THREE.Group; pos: THREE.Vector3 }[] };
     const councilCutscene = { active: false, step: 0, timer: 0 };
     // Surface-material footstep pickers
     const surfaceKind = (): "cobble" | "grass" | "wood" | "stone" | "dirt" => {
