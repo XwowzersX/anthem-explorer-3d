@@ -2150,6 +2150,7 @@ export default function AnthemGame() {
       }
     };
     const startChase = () => {
+      councilCutscene.active = false; // End cutscene before chase
       chaseState.active = true;
       chaseState.timeLeft = 90;
       chaseState.headStart = 2.0; // seconds before guards begin pursuit
@@ -2182,14 +2183,14 @@ export default function AnthemGame() {
         activeBeatRef.current = null;
         return;
       }
-      // If council cutscene is running, E advances lines
-      if (councilCutscene.active) {
-        advanceCouncilCutscene();
-        return;
-      }
       // Block ALL interactions during chase (except dismissing npc lines)
       if (chaseState.active) {
         if (npcLineRef.current) { npcLineRef.current = null; setNpcLine(null); }
+        return;
+      }
+      // If council cutscene is running, E advances lines
+      if (councilCutscene.active) {
+        advanceCouncilCutscene();
         return;
       }
       if (npcLineRef.current) { npcLineRef.current = null; setNpcLine(null); return; }
