@@ -2661,6 +2661,7 @@ export default function AnthemGame() {
       velocity.lerp(move, 0.4);
 
       // Flying mode in dev mode
+      const ox = SCENE_OFFSETS[currentScene];
       if (devModeRef.current && devFlyRef.current) {
         // Free flight - WASD for horizontal, Space/Q for up, Ctrl/E for down
         if (keys["Space"]) camera.position.y += speed * dt;
@@ -2671,7 +2672,6 @@ export default function AnthemGame() {
         camera.position.z += velocity.z;
       } else {
         const activeColliders = colliderSets[currentScene];
-        const ox = SCENE_OFFSETS[currentScene];
 
         // Collide in LOCAL space (subtract ox from camera.x to get local)
         const lx = camera.position.x - ox, lz = camera.position.z;
