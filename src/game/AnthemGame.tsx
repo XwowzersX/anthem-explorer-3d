@@ -2717,8 +2717,9 @@ export default function AnthemGame() {
           // --- caught? ---
           const distP = Math.hypot(camera.position.x - g.mesh.position.x, camera.position.z - g.mesh.position.z);
           if (g.state === "chase" && distP < 1.3) {
-            // Caught → reset player far in front of council with fresh head-start
+            // Caught → full reset with fresh timer
             camera.position.set(COUNCIL_CX, 1.7, COUNCIL_CZ + 40);
+            chaseState.timeLeft = 90;
             chaseState.headStart = 2.0;
             chaseState.hadContact = false;
             for (let i = 0; i < chaseState.guards.length; i++) {
@@ -2728,7 +2729,8 @@ export default function AnthemGame() {
               gi.lastSeen = new THREE.Vector3(COUNCIL_CX, 0, COUNCIL_CZ + 40);
               gi.searchT = 0;
             }
-            setNpcLine({ name: "Guard", line: "Halt! (You have been caught — try again.)" });
+            setChase({ active: true, timeLeft: 90 });
+            setNpcLine({ name: "Guard", line: "Halt! (Caught — try again.)" });
             break;
           }
         }
@@ -2762,7 +2764,7 @@ export default function AnthemGame() {
             gi.searchT = 0;
           }
           setChase({ active: true, timeLeft: 90 });
-          setNpcLine({ name: "—", line: "Time's up! The guards have spotted you again. Run!" });
+          setNpcLine({ name: "—", line: "They've cornered you! Back to the start — run!" });
         }
       }
 
