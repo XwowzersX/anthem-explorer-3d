@@ -108,6 +108,17 @@ type Gate = {
   position: THREE.Vector3;
 };
 
+const OBJECTIVES = [
+  "Take the parchment from beneath your cot",
+  "Step outside - find the iron grating east of the city",
+  "Descend into the tunnel - scavenge parts and BUILD the light",
+  "Climb out - cross the south wall to meet the Golden One",
+  "Return to the Council Hall - present the light",
+  "Flee west - enter the Uncharted Forest",
+  "Find the glass house deep in the forest",
+  "Open the book - discover the sacred word",
+];
+
 export default function AnthemGame() {
   const mountRef = useRef<HTMLDivElement>(null);
   const [started, setStarted] = useState(false);
@@ -128,6 +139,15 @@ export default function AnthemGame() {
   const [exhausted, setExhausted] = useState(false);
   const [lightParts, setLightParts] = useState(0);
   const [lightCharge, setLightCharge] = useState(0);
+  const [devMode, setDevMode] = useState(false);
+  const [devFly, setDevFly] = useState(false);
+  const [devSpeed, setDevSpeed] = useState(false);
+  const devModeRef = useRef(false);
+  const devFlyRef = useRef(false);
+  const devSpeedRef = useRef(false);
+  const lightBuildRef = useRef({ parts: 0, assembled: false, charge: 0, lit: false, cranking: false });
+  const progressRef = useRef(0);
+  const devJumpToChapterRef = useRef<((chapter: number) => void) | null>(null);
   const mutedRef = useRef(false);
   const masterGainRef = useRef<GainNode | null>(null);
   const hasLanternRef = useRef(false);
@@ -135,6 +155,9 @@ export default function AnthemGame() {
   const npcLineRef = useRef<{ name: string; line: string } | null>(null);
   const compassRibbonRef = useRef<HTMLDivElement>(null);
   useEffect(() => { npcLineRef.current = npcLine; }, [npcLine]);
+  useEffect(() => { devModeRef.current = devMode; }, [devMode]);
+  useEffect(() => { devFlyRef.current = devFly; }, [devFly]);
+  useEffect(() => { devSpeedRef.current = devSpeed; }, [devSpeed]);
 
   useEffect(() => {
     mutedRef.current = muted;
@@ -143,7 +166,6 @@ export default function AnthemGame() {
   }, [muted]);
 
 
-  const progressRef = useRef(0);
   const activeBeatRef = useRef<Beat | null>(null);
 
 
@@ -2028,16 +2050,6 @@ export default function AnthemGame() {
       { beatId: "ego", position: new THREE.Vector3(0, 1.5, -H_D / 2 + 4), label: "Open the book", order: 7, sceneKey: "house" },
     ];
 
-    const OBJECTIVES = [
-      "Take the parchment from beneath your cot",
-      "Step outside — find the iron grating east of the city",
-      "Descend into the tunnel — scavenge parts and BUILD the light",
-      "Climb out — cross the south wall to meet the Golden One",
-      "Return to the Council Hall — present the light",
-      "Flee west — enter the Uncharted Forest",
-      "Find the glass house deep in the forest",
-      "Open the book — discover the sacred word",
-    ];
     setObjective(OBJECTIVES[0]);
 
     // =====================================================================
@@ -2071,11 +2083,24 @@ export default function AnthemGame() {
     // CONTROLS
     // =====================================================================
     const keys: Record<string, boolean> = {};
+    // Dev password detection
+    let keySequence = "";
+    const DEV_PASSWORD = "X3001120093X";
     const onKey = (e: KeyboardEvent, down: boolean) => {
       keys[e.code] = down;
       if (e.code === "Space" && document.pointerLockElement === renderer.domElement) e.preventDefault();
       if (down && e.code === "KeyE") tryInteract();
       if (down && e.code === "Escape") { setActiveBeat(null); activeBeatRef.current = null; }
+      // Dev password detection - accumulate keypresses
+      if (down && e.key.length === 1) {
+        keySequence += e.key.toUpperCase();
+        if (keySequence.length > 50) keySequence = keySequence.slice(-50);
+        if (keySequence.includes(DEV_PASSWORD)) {
+          setDevMode(d => !d);
+          keySequence = "";
+          sfx.bell();
+        }
+      }
     };
     const kd = (e: KeyboardEvent) => onKey(e, true);
     const ku = (e: KeyboardEvent) => onKey(e, false);
@@ -2123,6 +2148,20 @@ export default function AnthemGame() {
       }
       if (order < OBJECTIVES.length) setObjective(OBJECTIVES[order]);
       if (order >= STORY.length) setFinished(true);
+    };
+    // Expose advanceTo for dev panel
+    devJumpToChapterRef.current = (chapter: number) => {
+      advanceTo(chapter);
+      // Grant items needed for this chapter
+      if (chapter >= 2) { setHasLantern(true); hasLanternRef.current = true; }
+      if (chapter >= 3) {
+        setLightParts(3);
+        setLightCharge(1);
+        lightBuild.parts = 3;
+        lightBuild.assembled = true;
+        lightBuild.lit = true;
+        lightBuildRef.current = { parts: 3, assembled: true, charge: 1, lit: false, cranking: false };
+      }
     };
 
     // Council cutscene → chase scene machinery
@@ -2599,7 +2638,10 @@ export default function AnthemGame() {
       const sprintHeld = !!(keys["ShiftLeft"] || keys["ShiftRight"]);
       const wantsMove = move.lengthSq() > 0;
       let sprinting = false;
-      if (sprintHeld && wantsMove && !sprint.exhausted && sprint.value > 0) {
+      // Dev mode: infinite sprint, fast movement, no exhaustion
+      if (devModeRef.current && devSpeedRef.current) {
+        sprinting = sprintHeld;
+      } else if (sprintHeld && wantsMove && !sprint.exhausted && sprint.value > 0) {
         sprinting = true;
         sprint.value -= dt / 4.0;
         if (sprint.value <= 0) {
@@ -2612,36 +2654,49 @@ export default function AnthemGame() {
         if (sprint.value >= 1 && sprint.exhausted) sprint.exhausted = false;
       }
       if (frame % 6 === 0) { setStamina(sprint.value); setExhausted(sprint.exhausted); }
-      const speed = sprinting ? 14 : 7;
+      // Dev mode: 3x speed when devSpeed enabled
+      const baseSpeed = devModeRef.current && devSpeedRef.current ? 30 : 7;
+      const speed = sprinting ? baseSpeed * 2 : baseSpeed;
       if (wantsMove) move.normalize().multiplyScalar(speed * dt);
       velocity.lerp(move, 0.4);
 
-      const activeColliders = colliderSets[currentScene];
-      const ox = SCENE_OFFSETS[currentScene];
+      // Flying mode in dev mode
+      if (devModeRef.current && devFlyRef.current) {
+        // Free flight - WASD for horizontal, Space/Q for up, Ctrl/E for down
+        if (keys["Space"]) camera.position.y += speed * dt;
+        if (keys["KeyQ"]) camera.position.y += speed * dt;
+        if (keys["ControlLeft"] || keys["ControlRight"] || keys["KeyZ"]) camera.position.y -= speed * dt;
+        // No collision in fly mode
+        camera.position.x += velocity.x;
+        camera.position.z += velocity.z;
+      } else {
+        const activeColliders = colliderSets[currentScene];
+        const ox = SCENE_OFFSETS[currentScene];
 
-      // Collide in LOCAL space (subtract ox from camera.x to get local)
-      const lx = camera.position.x - ox, lz = camera.position.z;
-      const nextLX = lx + velocity.x;
-      const bx = new THREE.Box3(
-        new THREE.Vector3(nextLX - 0.4, 0, lz - 0.4),
-        new THREE.Vector3(nextLX + 0.4, 2, lz + 0.4),
-      );
-      if (!activeColliders.some(c => c.box.intersectsBox(bx))) camera.position.x += velocity.x;
+        // Collide in LOCAL space (subtract ox from camera.x to get local)
+        const lx = camera.position.x - ox, lz = camera.position.z;
+        const nextLX = lx + velocity.x;
+        const bx = new THREE.Box3(
+          new THREE.Vector3(nextLX - 0.4, 0, lz - 0.4),
+          new THREE.Vector3(nextLX + 0.4, 2, lz + 0.4),
+        );
+        if (!activeColliders.some(c => c.box.intersectsBox(bx))) camera.position.x += velocity.x;
 
-      const lx2 = camera.position.x - ox;
-      const nextLZ = lz + velocity.z;
-      const bz = new THREE.Box3(
-        new THREE.Vector3(lx2 - 0.4, 0, nextLZ - 0.4),
-        new THREE.Vector3(lx2 + 0.4, 2, nextLZ + 0.4),
-      );
-      if (!activeColliders.some(c => c.box.intersectsBox(bz))) camera.position.z += velocity.z;
+        const lx2 = camera.position.x - ox;
+        const nextLZ = lz + velocity.z;
+        const bz = new THREE.Box3(
+          new THREE.Vector3(lx2 - 0.4, 0, nextLZ - 0.4),
+          new THREE.Vector3(lx2 + 0.4, 2, nextLZ + 0.4),
+        );
+        if (!activeColliders.some(c => c.box.intersectsBox(bz))) camera.position.z += velocity.z;
+      }
 
-      // crouch — hold Ctrl or C
-      const crouching = !!(keys["ControlLeft"] || keys["ControlRight"] || keys["KeyC"]);
+      // crouch — hold Ctrl or C (skip in fly mode)
+      const crouching = !devFlyRef.current && !!(keys["ControlLeft"] || keys["ControlRight"] || keys["KeyC"]);
       groundY = crouching ? CROUCH_Y : STAND_Y;
       // footstep cadence — surface-based, quieter while crouched
       const horizSpeed = Math.hypot(velocity.x, velocity.z);
-      if (onGround && horizSpeed > 0.02 && !crouching) {
+      if (onGround && horizSpeed > 0.02 && !crouching && !devFlyRef.current) {
         stepAccum += horizSpeed;
         const cadence = sprinting ? 0.55 : 0.85;
         if (stepAccum > cadence) {
@@ -2652,20 +2707,24 @@ export default function AnthemGame() {
         stepAccum = Math.max(0, stepAccum - dt);
       }
 
-      // jump + gravity
-      if (keys["Space"] && onGround && !crouching && !activeBeatRef.current && document.pointerLockElement === renderer.domElement) {
-        vy = JUMP_V;
-        onGround = false;
-        sfx.jump();
-      }
-      vy -= GRAVITY * dt;
-      camera.position.y += vy * dt;
-      if (camera.position.y <= groundY) {
-        const wasFalling = !onGround;
-        camera.position.y = groundY;
-        vy = 0;
-        if (wasFalling) sfx.land(surfaceKind());
-        onGround = true;
+      // jump + gravity (skip in fly mode)
+      if (!devFlyRef.current) {
+        if (keys["Space"] && onGround && !crouching && !activeBeatRef.current && document.pointerLockElement === renderer.domElement) {
+          vy = JUMP_V;
+          onGround = false;
+          sfx.jump();
+        }
+        vy -= GRAVITY * dt;
+        camera.position.y += vy * dt;
+        if (camera.position.y <= groundY) {
+          const wasFalling = !onGround;
+          camera.position.y = groundY;
+          vy = 0;
+          if (wasFalling) sfx.land(surfaceKind());
+          onGround = true;
+        }
+      } else {
+        onGround = false; // In fly mode, never "on ground"
       }
 
       // Chase logic — guards hunt with vision + pathfinding; win by descending
@@ -3084,7 +3143,42 @@ export default function AnthemGame() {
           {/* Chase timer banner */}
           {chase?.active && (
             <div className="absolute top-16 left-1/2 -translate-x-1/2 z-20 px-4 py-2 border border-red-600 bg-black/70 text-red-300 uppercase tracking-[0.3em] text-xs animate-pulse">
-              ⚠ Guards pursuing · {Math.ceil(chase.timeLeft)}s
+              Guards pursuing - {Math.ceil(chase.timeLeft)}s
+            </div>
+          )}
+
+          {/* Dev mode panel */}
+          {devMode && (
+            <div className="absolute top-4 left-4 z-30 p-3 border border-[#4a8ac8]/60 bg-[#0a1520]/90 text-[10px] uppercase tracking-wider text-[#8ac8e8] space-y-2">
+              <div className="text-[#4a8ac8] font-bold mb-2">Dev Mode</div>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" checked={devFly} onChange={() => setDevFly(f => !f)} className="accent-[#4a8ac8]" />
+                <span>Fly (Space/Q up, Ctrl/Z down)</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" checked={devSpeed} onChange={() => setDevSpeed(s => !s)} className="accent-[#4a8ac8]" />
+                <span>Fast Move (3x speed)</span>
+              </label>
+              <div className="border-t border-[#4a8ac8]/30 pt-2 mt-2">
+                <div className="text-[#6a9ac8] mb-1">Jump to Chapter:</div>
+                <div className="flex flex-wrap gap-1 max-w-[200px]">
+                  {OBJECTIVES.map((obj, i) => (
+                    <button
+                      key={i}
+                      onClick={() => {
+                        if (devJumpToChapterRef.current) {
+                          devJumpToChapterRef.current(i);
+                          setNpcLine({ name: "Dev", line: `Jumped to chapter ${i + 1}: ${obj}` });
+                        }
+                      }}
+                      className={`px-1.5 py-0.5 text-[9px] border ${progress === i ? 'bg-[#4a8ac8]/40 border-[#4a8ac8]' : 'border-[#3a6a98]/40 hover:bg-[#4a8ac8]/20'}`}
+                    >
+                      {i + 1}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="text-[8px] text-[#6a9ac8] pt-1">Type password again to exit</div>
             </div>
           )}
 
