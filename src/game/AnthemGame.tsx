@@ -308,9 +308,28 @@ export default function AnthemGame() {
       src.start(t); src.stop(t + dur + 0.05);
     };
     const sfx = {
-      footstep: () => noiseBurst(0.09, 220 + Math.random() * 80, 8, 0.18, 0.1),
-      jump:     () => { blip(420, 0.12, "sine", 0.18, 0.15); noiseBurst(0.08, 800, 4, 0.1, 0.1); },
-      land:     () => noiseBurst(0.14, 150, 5, 0.22, 0.2),
+      footstep: (surface: "grass" | "wood" | "stone" | "cobble" | "dirt") => {
+        // Surface-specific footstep sounds
+        if (surface === "grass") noiseBurst(0.12, 280, 2, 0.14, 0.04); // soft rustle
+        else if (surface === "wood") { noiseBurst(0.07, 200, 8, 0.22, 0.12); blip(120, 0.04, "sine", 0.08, 0.06); } // hollow thud
+        else if (surface === "stone") { noiseBurst(0.06, 600, 14, 0.25, 0.5); noiseBurst(0.04, 280, 6, 0.15, 0.4); } // sharp click
+        else if (surface === "dirt") noiseBurst(0.11, 200, 3, 0.16, 0.03); // muffled crunch
+        else /* cobble */ { noiseBurst(0.08, 420, 12, 0.2, 0.2); noiseBurst(0.03, 150, 5, 0.12, 0.08); } // hard scrape
+      },
+      jump: () => {
+        // Breathy whoosh - like an exhale on exertion
+        noiseBurst(0.15, 600, 2, 0.12, 0.08);
+        blip(280, 0.08, "sine", 0.1, 0.06);
+        setTimeout(() => noiseBurst(0.08, 400, 3, 0.08, 0.05), 30);
+      },
+      land: (surface: "grass" | "wood" | "stone" | "cobble" | "dirt") => {
+        // Surface-specific landing sounds (heavier than footsteps)
+        if (surface === "grass") { noiseBurst(0.18, 180, 2, 0.2, 0.04); noiseBurst(0.08, 300, 3, 0.12, 0.03); }
+        else if (surface === "wood") { noiseBurst(0.15, 140, 10, 0.28, 0.18); blip(80, 0.12, "sine", 0.14, 0.12); }
+        else if (surface === "stone") { noiseBurst(0.12, 500, 16, 0.3, 0.6); noiseBurst(0.1, 250, 8, 0.2, 0.45); }
+        else if (surface === "dirt") { noiseBurst(0.16, 160, 3, 0.22, 0.04); noiseBurst(0.06, 280, 4, 0.12, 0.02); }
+        else /* cobble */ { noiseBurst(0.14, 380, 14, 0.28, 0.3); noiseBurst(0.08, 200, 6, 0.18, 0.15); }
+      },
       interact: () => { blip(660, 0.18, "triangle", 0.2, 0.5); setTimeout(() => blip(990, 0.22, "sine", 0.15, 0.6), 60); },
       bell:     () => { blip(523, 1.2, "sine", 0.22, 0.9); blip(659, 1.2, "sine", 0.18, 0.9); blip(784, 1.4, "sine", 0.14, 0.9); },
       door:     () => { noiseBurst(0.7, 180, 2, 0.28, 0.5); blip(110, 0.6, "sawtooth", 0.12, 0.4); },
@@ -2526,19 +2545,28 @@ export default function AnthemGame() {
     // Surface-material footstep pickers
     const surfaceKind = (): "cobble" | "grass" | "wood" | "stone" | "dirt" => {
       if (currentScene === "dorm" || currentScene === "house") return "wood";
-      if (currentScene === "underground" || currentScene === "council") return "stone";
+      if (currentScene === "underground") {
+        // Dirt in side tunnels, stone near the build area
+        const p = camera.position;
+        const lx = p.x - SCENE_OFFSETS["underground"];
+        if (Math.abs(lx) > 6 || Math.abs(p.z) > 12) return "dirt"; // side tunnels
+        return "stone"; // main chamber
+      }
+      if (currentScene === "council") return "stone";
       // surface: grass in field/forest, cobble in city
       const p = camera.position; const lz = p.z, lx = p.x;
       if (lz > 150) return "grass"; // field
-      if (lx < -140) return "grass"; // forest
+      if (lx < -140) {
+        // Forest paths are dirt, deep forest is grass
+        if (lz > 60 && lz < 140) return "dirt"; // forest path
+        return "grass"; // deep forest
+      }
+      // City outskirts - dirt near the grate area
+      if (lz < -110) return "dirt"; // north road to grate
       return "cobble";
     };
     const doFootstep = () => {
-      const k = surfaceKind();
-      if (k === "grass") noiseBurst(0.12, 380, 3, 0.16, 0.05);
-      else if (k === "wood") { noiseBurst(0.09, 260, 6, 0.19, 0.08); blip(140, 0.06, "sine", 0.09, 0.05); }
-      else if (k === "stone") noiseBurst(0.08, 500, 10, 0.18, 0.35);
-      else /* cobble */ noiseBurst(0.09, 340, 9, 0.2, 0.15);
+      sfx.footstep(surfaceKind());
     };
 
 
@@ -2628,7 +2656,7 @@ export default function AnthemGame() {
       if (keys["Space"] && onGround && !crouching && !activeBeatRef.current && document.pointerLockElement === renderer.domElement) {
         vy = JUMP_V;
         onGround = false;
-        blip(320, 0.09, "sine", 0.14, 0.1); noiseBurst(0.08, 620, 5, 0.12, 0.08);
+        sfx.jump();
       }
       vy -= GRAVITY * dt;
       camera.position.y += vy * dt;
@@ -2636,7 +2664,7 @@ export default function AnthemGame() {
         const wasFalling = !onGround;
         camera.position.y = groundY;
         vy = 0;
-        if (wasFalling) sfx.land();
+        if (wasFalling) sfx.land(surfaceKind());
         onGround = true;
       }
 
