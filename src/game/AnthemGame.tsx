@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 
 /**
- * ANTHEM — a semi-open 3D walk through Ayn Rand's novella.
+ * ANTHEM - a semi-open 3D walk through Ayn Rand's novella.
  *
  * Architecture:
  *   - One Three.js scene.
@@ -15,7 +15,7 @@ import * as THREE from "three";
  *     swaps the active collider list. Pressing E at the interior's exit
  *     pad teleports you back to the surface in front of the door.
  *
- * This is the same trick the underground tunnel uses — now extended to
+ * This is the same trick the underground tunnel uses - now extended to
  * the dormitory, council hall, and glass house.
  */
 
@@ -26,19 +26,19 @@ const STORY: Beat[] = [
     id: "start",
     title: "I. The Home of the Street Sweepers",
     body:
-      "“It is a sin to write this. It is a sin to think words no others think and to put them down upon a paper no others are to see.”\n\nYou are Equality 7-2521. You sleep in a long hall of one hundred beds. Beneath your cot you have hidden a stub of candle and a sheaf of stolen paper. Take the parchment. Then step out into the street.",
+      "\"It is a sin to write this. It is a sin to think words no others think and to put them down upon a paper no others are to see.\"\n\nYou are Equality 7-2521. You sleep in a long hall of one hundred beds. Beneath your cot you have hidden a stub of candle and a sheaf of stolen paper. Take the parchment. Then step out into the street.",
   },
   {
     id: "tunnel_entry",
     title: "II. The Tunnel from the Unmentionable Times",
     body:
-      "An iron grating in the cobbles, half-buried. Below: a tunnel of stone, perfect and forbidden. ‘What is this place?’ you whisper. ‘Why was it built?’ Descend the stair.",
+      "An iron grating in the cobbles, half-buried. Below: a tunnel of stone, perfect and forbidden. 'What is this place?' you whisper. 'Why was it built?' Descend the stair.",
   },
   {
     id: "tunnel_light",
     title: "III. The Power of the Sky",
     body:
-      "Wires. Glass. A box that holds lightning torn from the storm. For two years you have worked in secret, and tonight the metal glows — a light without fire, without smoke. You have made it. You alone.",
+      "Wires. Glass. A box that holds lightning torn from the storm. For two years you have worked in secret, and tonight the metal glows - a light without fire, without smoke. You have made it. You alone.",
   },
   {
     id: "field_meet",
@@ -50,7 +50,7 @@ const STORY: Beat[] = [
     id: "council",
     title: "V. The World Council of Scholars",
     body:
-      "You bring them the light. You expect joy. Instead: terror. ‘How dared you, gutter cleaner!’ You snatch the glass box and run — through the door, into the Uncharted Forest where no man has ever gone.",
+      "You bring them the light. You expect joy. Instead: terror. 'How dared you, gutter cleaner!' You snatch the glass box and run - through the door, into the Uncharted Forest where no man has ever gone.",
   },
   {
     id: "forest",
@@ -59,16 +59,34 @@ const STORY: Beat[] = [
       "The trees are old and the silence is older. Liberty 5-3000 has followed. You name her The Golden One; she names you The Unconquered. Beyond the trees: a road of stone.",
   },
   {
+    id: "forest_camp",
+    title: "VIb. The Fire in the Woods",
+    body:
+      "Night falls. You build a fire in a clearing, and The Golden One sits beside you. 'I followed you,' she says. 'I did not know what I would find. Only that I had to follow.' Her hand finds yours in the dark.",
+  },
+  {
     id: "house",
     title: "VII. The House of the Unmentionable Times",
     body:
-      "A house of glass and color, made for two — perhaps three. Inside: mirrors, clothes, and books in a tongue you can almost read. You read for days. And then, on a page worn soft by another's hand, you find a word so simple it stops your breath.",
+      "A house of glass and color, made for two - perhaps three. Inside: mirrors, clothes, and books in a tongue you can almost read. You read for days. And then, on a page worn soft by another's hand, you find a word so simple it stops your breath.",
+  },
+  {
+    id: "house_mirror",
+    title: "VIIb. The Mirror",
+    body:
+      "You stand before a tall glass. For the first time, you see yourself - not as a unit of the collective, but as a single soul. Your own face looks back, unowned by any brother. 'This is mine,' you whisper. 'This body. This face. Mine.'",
   },
   {
     id: "ego",
     title: "VIII. EGO",
     body:
-      "“I am. I think. I will.\n\nMy hands… My spirit… My sky… My forest… This earth of mine….\n\nI stand here on the summit of the mountain. I lift my head and I spread my arms. This, my body and spirit, this is the end of the quest. I am the warrant and the sanction.”\n\n— The sacred word: EGO.",
+      "\"I am. I think. I will.\n\nMy hands... My spirit... My sky... My forest... This earth of mine....\n\nI stand here on the summit of the mountain. I lift my head and I spread my arms. This, my body and spirit, this is the end of the quest. I am the warrant and the sanction.\"\n\n- The sacred word: EGO.",
+  },
+  {
+    id: "sunrise",
+    title: "IX. The Dawn",
+    body:
+      "Morning comes. You and The Golden One stand on a hill above the house. The sun rises over a world you do not owe. Below, the city sleeps in its chains. You are free. 'What will we do?' she asks. 'Live,' you answer. 'And teach our sons the word: I.'",
   },
 ];
 
@@ -115,8 +133,11 @@ const OBJECTIVES = [
   "Climb out - cross the south wall to meet the Golden One",
   "Return to the Council Hall - present the light",
   "Flee west - enter the Uncharted Forest",
+  "Find a clearing and rest with The Golden One",
   "Find the glass house deep in the forest",
+  "Look in the mirror - see yourself for the first time",
   "Open the book - discover the sacred word",
+  "Step outside to watch the sunrise",
 ];
 
 export default function AnthemGame() {
@@ -208,7 +229,7 @@ export default function AnthemGame() {
     mount.appendChild(renderer.domElement);
 
     // =====================================================================
-    // PROCEDURAL AUDIO (Web Audio API — no assets, starts on first gesture)
+    // PROCEDURAL AUDIO (Web Audio API - no assets, starts on first gesture)
     // =====================================================================
     const AC = (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext);
     const actx = new AC();
@@ -233,7 +254,7 @@ export default function AnthemGame() {
     wetGain.gain.value = 0.22;
     convolver.connect(wetGain).connect(masterGain);
 
-    // Ambient drone — two detuned oscillators + slow LFO filter
+    // Ambient drone - two detuned oscillators + slow LFO filter
     const droneGain = actx.createGain();
     droneGain.gain.value = 0;
     droneGain.connect(masterGain);
@@ -364,7 +385,7 @@ export default function AnthemGame() {
 
 
     // =====================================================================
-    // SCENE GROUPS — one per "map". Only the active one is visible.
+    // SCENE GROUPS - one per "map". Only the active one is visible.
     // =====================================================================
     const SCENE_OFFSETS: Record<SceneKey, number> = {
       surface: 0,
@@ -396,9 +417,9 @@ export default function AnthemGame() {
     };
 
     // =====================================================================
-    // SHARED MATERIALS (huge perf win — one material instead of hundreds)
+    // SHARED MATERIALS (huge perf win - one material instead of hundreds)
     // =====================================================================
-    // ---------- Procedural textures (CanvasTexture — no asset deps) ----------
+    // ---------- Procedural textures (CanvasTexture - no asset deps) ----------
     const noiseTex = (
       w: number, h: number,
       base: [number, number, number],
@@ -459,7 +480,7 @@ export default function AnthemGame() {
     };
 
     // =====================================================================
-    // SHARED MATERIALS (huge perf win — one material instead of hundreds)
+    // SHARED MATERIALS (huge perf win - one material instead of hundreds)
     // =====================================================================
     const M = {
       stone:  new THREE.MeshStandardMaterial({ map: T.stone, color: 0x6a6258, roughness: 0.92, metalness: 0.02 }),
@@ -545,7 +566,7 @@ export default function AnthemGame() {
       mesh.position.set(x, y + h / 2, z);
       sceneAdd(key, mesh);
       if (solid) {
-        // Local AABB computed directly — no world-matrix dependency.
+        // Local AABB computed directly - no world-matrix dependency.
         const box = new THREE.Box3(
           new THREE.Vector3(x - w / 2 - 0.05, y, z - d / 2 - 0.05),
           new THREE.Vector3(x + w / 2 + 0.05, y + h, z + d / 2 + 0.05),
@@ -626,7 +647,7 @@ export default function AnthemGame() {
     const rand = () => { rs = (rs * 1664525 + 1013904223) >>> 0; return (rs & 0xffffff) / 0xffffff; };
 
     // =====================================================================
-    // SURFACE — LIGHTING
+    // SURFACE - LIGHTING
     // =====================================================================
     scene.add(new THREE.HemisphereLight(0xb8c4dc, 0x3a3024, 1.25));
     scene.add(new THREE.AmbientLight(0x806a60, 0.4));
@@ -668,14 +689,14 @@ export default function AnthemGame() {
     }
 
     // =====================================================================
-    // SURFACE — GROUND
+    // SURFACE - GROUND
     // =====================================================================
     const ground = new THREE.Mesh(new THREE.PlaneGeometry(2400, 2400), M.cobble);
     ground.rotation.x = -Math.PI / 2;
     sceneAdd("surface", ground);
 
     // =====================================================================
-    // SURFACE — STREETS (lighter paved roads on top of cobble ground)
+    // SURFACE - STREETS (lighter paved roads on top of cobble ground)
     // =====================================================================
     const roadGeoNS = new THREE.PlaneGeometry(6, 240);
     const roadGeoEW = new THREE.PlaneGeometry(240, 6);
@@ -698,11 +719,11 @@ export default function AnthemGame() {
     sceneAdd("surface", plaza);
 
     // =====================================================================
-    // SURFACE — THE CITY (18th-century European aesthetic)
+    // SURFACE - THE CITY (18th-century European aesthetic)
     // =====================================================================
     const facadeMats = [M.plaster, M.plasterDark, M.plaster, M.plasterDark];
     const accentMats = [M.brick, M.slate, M.stone3];
-    const GRID = 7; // 15x15
+    const GRID = 6; // 12x12 grid, better spaced
     for (let i = -GRID; i <= GRID; i++) {
       for (let j = -GRID; j <= GRID; j++) {
         if (Math.abs(i) <= 1 && Math.abs(j) <= 1) continue; // plaza
@@ -711,12 +732,12 @@ export default function AnthemGame() {
         // Reserve slots
         if (i === -3 && j === -3) continue; // dormitory
         if (i === 0 && j === -6) continue; // council
-        const x = i * 17 + (rand() - 0.5) * 1.4;
-        const z = j * 17 + (rand() - 0.5) * 1.4;
-        const w = 8 + rand() * 4;
-        const dd = 8 + rand() * 5;
+        const x = i * 20 + (rand() - 0.5) * 0.8; // wider spacing (20 instead of 17)
+        const z = j * 20 + (rand() - 0.5) * 0.8;
+        const w = 7 + rand() * 3; // slightly smaller buildings
+        const dd = 7 + rand() * 3;
         // Taller 18th-century row houses (3-5 stories)
-        const h = 6 + rand() * 7;
+        const h = 5 + rand() * 6;
         const buildingStyle = Math.floor(rand() * 4);
         const mat = facadeMats[Math.floor(rand() * 4)];
         // Main building body
@@ -838,7 +859,7 @@ export default function AnthemGame() {
       }
     }
 
-    // Fire-burning street lamps along boulevards — 18th-century iron style
+    // Fire-burning street lamps along boulevards - 18th-century iron style
     const lampPostGeo = new THREE.CylinderGeometry(0.06, 0.1, 4.0, 8);
     const flameGeo = new THREE.ConeGeometry(0.22, 0.55, 6);
     const flameCoreGeo = new THREE.ConeGeometry(0.11, 0.35, 6);
@@ -894,7 +915,7 @@ export default function AnthemGame() {
       }
     }
 
-    // Central plaza fire — bigger, real light
+    // Central plaza fire - bigger, real light
     const fire = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.4, 0.6, 12), M.fire);
     fire.position.set(0, 0.3, 0);
     sceneAdd("surface", fire);
@@ -910,7 +931,7 @@ export default function AnthemGame() {
     flickerLamps.push({ light: fireLight, base: 2.6, cone: plazaFlame });
 
     // =====================================================================
-    // SURFACE — DORMITORY exterior shell
+    // SURFACE - DORMITORY exterior shell
     // =====================================================================
     const DORM_CX = -51, DORM_CZ = -51;
     const dormExt = addBuilding("surface", DORM_CX, DORM_CZ, 24, 7, 16, M.plasterDark, "north", 3.4);
@@ -920,7 +941,7 @@ export default function AnthemGame() {
     sceneAdd("surface", dormDoor);
 
     // =====================================================================
-    // SURFACE — IRON GRATING
+    // SURFACE - IRON GRATING
     // =====================================================================
     const GRATE_X = 130, GRATE_Z = 0;
     for (const [ox, oz, sw, sd] of [[-2.3, 0, 0.6, 5], [2.3, 0, 0.6, 5], [0, -2.3, 5, 0.6], [0, 2.3, 5, 0.6]] as const) {
@@ -937,13 +958,13 @@ export default function AnthemGame() {
     let grateSlideT = 0;
 
     // =====================================================================
-    // SURFACE — FIELD (fully fenced, only opens through the south wall gap)
+    // SURFACE - FIELD (fully fenced, only opens through the south wall gap)
     // =====================================================================
     for (let x = -140; x <= 140; x += 5) {
       if (Math.abs(x) < 5) continue;
       addBox("surface", x, 0, 150, 4.5, 2.4, 1.2, M.plasterDark);
     }
-    // wheat field perimeter fence — east, west, and far south sides
+    // wheat field perimeter fence - east, west, and far south sides
     for (let z = 152; z <= 388; z += 4) {
       addBox("surface", -140, 0, z, 0.4, 1.6, 4, M.woodDark);
       addBox("surface", 140, 0, z, 0.4, 1.6, 4, M.woodDark);
@@ -976,7 +997,7 @@ export default function AnthemGame() {
     // Raised lintel above head height. It is decorative only so it cannot leave
     // a hidden floor-level blocker after the portcullis opens.
     addBox("surface", 0, 4.8, GATE_Z, 22, 0.8, 0.8, M.woodDark, false);
-    // Gate itself — a wooden portcullis, 20 wide to fully fill the opening
+    // Gate itself - a wooden portcullis, 20 wide to fully fill the opening
     const gateMesh = new THREE.Mesh(new THREE.BoxGeometry(20, 4, 0.4),
       new THREE.MeshStandardMaterial({ color: 0x3a2618, roughness: 0.85, metalness: 0.1 }));
     gateMesh.position.set(0, 2, GATE_Z);
@@ -992,7 +1013,7 @@ export default function AnthemGame() {
       solved: false,
     };
     // Three pedestals on the CITY side of the gate (player approaches from z<200).
-    const pedHeights = [0.9, 1.6, 1.25]; // indices 0,1,2 — correct shortest→tallest = 0,2,1
+    const pedHeights = [0.9, 1.6, 1.25]; // indices 0,1,2 - correct shortest→tallest = 0,2,1
     const pedPositions: Array<[number, number]> = [[-9, 192], [4, 188], [10, 194]];
     const pedestals: Array<{ idx: number; base: THREE.Mesh; flame: THREE.Mesh; light: THREE.PointLight; lit: boolean; pos: THREE.Vector3 }> = [];
     for (let i = 0; i < 3; i++) {
@@ -1002,7 +1023,7 @@ export default function AnthemGame() {
         new THREE.MeshStandardMaterial({ color: 0x6a6055, roughness: 0.95, map: T.stone }));
       base.position.set(px, h / 2, pz);
       sceneAdd("surface", base);
-      // Rune on top — a Roman-numeral-ish rectangle groove
+      // Rune on top - a Roman-numeral-ish rectangle groove
       const rune = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.02, 0.05 + i * 0.08),
         new THREE.MeshStandardMaterial({ color: 0x1a1410, emissive: 0x000000 }));
       rune.position.set(px, h + 0.02, pz);
@@ -1031,10 +1052,10 @@ export default function AnthemGame() {
     sceneAdd("surface", liberty);
 
     // =====================================================================
-    // SURFACE — COUNCIL HALL EXTERIOR (grand institutional building)
+    // SURFACE - COUNCIL HALL EXTERIOR (grand institutional building)
     // =====================================================================
     const COUNCIL_CX = 0, COUNCIL_CZ = -160;
-    // Exterior shell — slate grey institutional look
+    // Exterior shell - slate grey institutional look
     addBox("surface", COUNCIL_CX, 0, COUNCIL_CZ + 18, 50, 16, 0.5, M.slate); // front
     addBox("surface", COUNCIL_CX, 0, COUNCIL_CZ - 18, 50, 16, 0.5, M.slate); // back
     addBox("surface", COUNCIL_CX + 25, 0, COUNCIL_CZ, 0.5, 16, 36, M.slate);
@@ -1070,9 +1091,9 @@ export default function AnthemGame() {
     sceneAdd("surface", archWin);
 
     // =====================================================================
-    // SURFACE — UNCHARTED FOREST
+    // SURFACE - UNCHARTED FOREST
     // =====================================================================
-    // Forest gate (still uses gate system — it's a barrier, not a door)
+    // Forest gate (still uses gate system - it's a barrier, not a door)
     const gates: Gate[] = [];
     const addGate = (x: number, z: number, orient: "ns" | "ew", w: number, unlockAfter: number, label: string) => {
       const ww = orient === "ns" ? w : 0.6;
@@ -1085,7 +1106,7 @@ export default function AnthemGame() {
       colliderSets.surface.push(collider);
       gates.push({ unlockAfter, collider, mesh, open: false, label, position: new THREE.Vector3(x, 1.8, z) });
     };
-    addGate(-140, 0, "ns", 8, 4, "Forest forbidden — flee the Council first");
+    addGate(-140, 0, "ns", 8, 4, "Forest forbidden - flee the Council first");
 
     const trunkGeo = new THREE.CylinderGeometry(0.45, 0.6, 9, 5);
     const topGeo = new THREE.ConeGeometry(2.6, 6, 6);
@@ -1107,8 +1128,31 @@ export default function AnthemGame() {
     const forestMarker = addBox("surface", FOREST_X, 0, FOREST_Z, 1.5, 0.3, 1.5, M.altar, false);
     forestMarker.position.y = 0.15;
 
+    // Forest clearing with campfire for the rest scene
+    const CAMP_X = FOREST_X - 30, CAMP_Z = FOREST_Z;
+    // Clear a small area (no trees should spawn here - it's after the tree loop)
+    // Add campfire ring
+    addBox("surface", CAMP_X, 0, CAMP_Z, 2.5, 0.15, 2.5, M.stone3, false);
+    // Fire pit
+    const firePit = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.6, 0.25, 12), M.stone3);
+    firePit.position.set(CAMP_X, 0.12, CAMP_Z);
+    sceneAdd("surface", firePit);
+    // Glowing embers (always visible, inviting)
+    const campEmbers = new THREE.Mesh(new THREE.SphereGeometry(0.25, 8, 6),
+      new THREE.MeshStandardMaterial({ color: 0xff6030, emissive: 0xff4010, emissiveIntensity: 1.5 }));
+    campEmbers.position.set(CAMP_X, 0.3, CAMP_Z);
+    sceneAdd("surface", campEmbers);
+    const campLight = new THREE.PointLight(0xff6040, 2.0, 15);
+    campLight.position.set(CAMP_X, 0.6, CAMP_Z);
+    sceneAdd("surface", campLight);
+    flickerLamps.push({ light: campLight, base: 2.0, cone: campEmbers });
+    // The Golden One appears at the campfire after you enter the forest
+    const forestLiberty = liberty.clone();
+    forestLiberty.position.set(CAMP_X - 2, 0, CAMP_Z);
+    sceneAdd("surface", forestLiberty);
+
     // =====================================================================
-    // WORLD BORDER — ring of trees + invisible wall + heavy outer fog
+    // WORLD BORDER - ring of trees + invisible wall + heavy outer fog
     // =====================================================================
     // A big ring at radius ~460 so the surface world stops feeling infinite.
     const BORDER_R = 460;
@@ -1136,7 +1180,7 @@ export default function AnthemGame() {
       top.position.set(bx, 11, bz);
       sceneAdd("surface", top);
     }
-    // Hard invisible wall at radius BORDER_R + 4 — implemented as segmented boxes
+    // Hard invisible wall at radius BORDER_R + 4 - implemented as segmented boxes
     for (let a = 0; a < Math.PI * 2; a += 0.2) {
       const r = BORDER_R + 6;
       const bx = Math.cos(a) * r, bz = Math.sin(a) * r;
@@ -1151,7 +1195,7 @@ export default function AnthemGame() {
 
 
     // =====================================================================
-    // SURFACE — GLASS HOUSE EXTERIOR
+    // SURFACE - GLASS HOUSE EXTERIOR
     // =====================================================================
     const HX = -420, HZ = 0;
     const HW = 22, HH = 9, HD = 26, HT = 0.4, HDOOR = 4;
@@ -1172,7 +1216,7 @@ export default function AnthemGame() {
     sceneAdd("surface", houseDoor);
 
     // =====================================================================
-    // INTERIOR — DORMITORY (period: long hall, oil lamps, iron cots)
+    // INTERIOR - DORMITORY (period: long hall, oil lamps, iron cots)
     // =====================================================================
     // Big room ~ 28 x 18, low ceiling
     const D_W = 28, D_D = 18, D_H = 5;
@@ -1183,7 +1227,7 @@ export default function AnthemGame() {
     dormCeil.rotation.x = Math.PI / 2;
     dormCeil.position.set(0, D_H, 0);
     sceneAdd("dorm", dormCeil);
-    // Four walls (plaster, no openings — this is a sealed room)
+    // Four walls (plaster, no openings - this is a sealed room)
     addBox("dorm", 0, 0, -D_D / 2, D_W, D_H, 0.3, M.plaster);
     addBox("dorm", 0, 0, D_D / 2, D_W, D_H, 0.3, M.plaster);
     addBox("dorm", -D_W / 2, 0, 0, 0.3, D_H, D_D, M.plaster);
@@ -1218,7 +1262,7 @@ export default function AnthemGame() {
     myCot.position.set(11, 0.25, 0);
     sceneAdd("dorm", myCot);
     addBox("dorm", 11, 0, -2, 1.4, 0.5, 1.4, M.wood, false); // small chest at foot
-    // Parchment on chest — glows
+    // Parchment on chest - glows
     const parchment = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.05, 0.5),
       new THREE.MeshStandardMaterial({ color: 0xeed9a4, emissive: 0xffe080, emissiveIntensity: 1.4 }));
     parchment.position.set(11, 0.78, -2);
@@ -1236,7 +1280,7 @@ export default function AnthemGame() {
     const dormLight2 = new THREE.PointLight(0xffc070, 1.4, 26);
     dormLight2.position.set(8, 3.6, D_D / 2 - 0.4);
     sceneAdd("dorm", dormLight2);
-    // Exit pad — at one end, glowing — labeled "the door"
+    // Exit pad - at one end, glowing - labeled "the door"
     const dormExit = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.15, 1.6), M.exitPad);
     dormExit.position.set(-D_W / 2 + 1.5, 0.08, 0);
     sceneAdd("dorm", dormExit);
@@ -1244,7 +1288,7 @@ export default function AnthemGame() {
     addBox("dorm", -D_W / 2 + 0.3, 0, 0, 0.4, 4.5, 3.2, M.doorWood, false);
 
     // =====================================================================
-    // INTERIOR — UNDERGROUND (a clean enclosed network — no holes)
+    // INTERIOR - UNDERGROUND (a clean enclosed network - no holes)
     // =====================================================================
     // Junction chamber
     const J = 18, JH = 5;
@@ -1283,7 +1327,7 @@ export default function AnthemGame() {
     const mossGeo = new THREE.CircleGeometry(0.8, 8);
     const tunnelFlicker: THREE.PointLight[] = [];
 
-    // Corridor builder — closed box: floor, ceiling, two solid walls, capped at far end
+    // Corridor builder - closed box: floor, ceiling, two solid walls, capped at far end
     const buildCorridor = (
       fromX: number, fromZ: number, toX: number, toZ: number,
       width = OPEN, height = JH,
@@ -1346,7 +1390,7 @@ export default function AnthemGame() {
         rail.rotation.y = -angle;
         sceneAdd("underground", rail);
       }
-      // timber support arches — posts + lintel every ~9 units (mine-shaft look)
+      // timber support arches - posts + lintel every ~9 units (mine-shaft look)
       const archCount = Math.max(1, Math.floor(len / 9));
       for (let i = 0; i < archCount; i++) {
         const at = -len / 2 + (i + 0.5) * (len / archCount);
@@ -1466,7 +1510,7 @@ export default function AnthemGame() {
     // east/west walls solid
     addBox("underground", CHX + CHS / 2, 0, CHZ, 0.4, JH, CHS, M.tunnelWall);
     addBox("underground", CHX - CHS / 2, 0, CHZ, 0.4, JH, CHS, M.tunnelWall);
-    // Altar — a wooden workbench with the invention on top
+    // Altar - a wooden workbench with the invention on top
     const lbAltar = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.9, 1.8), M.altar);
     lbAltar.position.set(CHX, 0.45, CHZ - 2);
     sceneAdd("underground", lbAltar);
@@ -1480,7 +1524,7 @@ export default function AnthemGame() {
       new THREE.MeshStandardMaterial({ color: 0xb08838, metalness: 0.85, roughness: 0.3 }));
     socket.position.set(CHX, 1.32, CHZ - 2);
     sceneAdd("underground", socket);
-    // Glass bulb (the "light without fire") — dark until you BUILD it
+    // Glass bulb (the "light without fire") - dark until you BUILD it
     const bulbMat = new THREE.MeshStandardMaterial({
       color: 0xfff8dd, emissive: 0xfff0aa, emissiveIntensity: 0,
       transparent: true, opacity: 0.85, roughness: 0.1, metalness: 0.1,
@@ -1516,7 +1560,7 @@ export default function AnthemGame() {
     lbLight.position.set(CHX, 2.4, CHZ - 2);
     sceneAdd("underground", lbLight);
 
-    // Hand-crank dynamo beside the bench — you spin this to charge the light
+    // Hand-crank dynamo beside the bench - you spin this to charge the light
     const dynamoBase = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.9, 0.8), M.stone3);
     dynamoBase.position.set(CHX + 2.2, 0.45, CHZ - 2);
     sceneAdd("underground", dynamoBase);
@@ -1530,7 +1574,7 @@ export default function AnthemGame() {
     crankHandle.position.set(0, 0.42, 0);
     crankWheel.add(crankHandle);
 
-    // THE LIGHT — build state. Find 3 parts in the dead-end tunnels, mount
+    // THE LIGHT - build state. Find 3 parts in the dead-end tunnels, mount
     // them on the bench, then crank the dynamo until the filament catches.
     const lightBuild = { parts: 0, assembled: false, charge: 0, lit: false, cranking: false };
     type LightPart = { name: string; pos: THREE.Vector3; mesh: THREE.Object3D; taken: boolean };
@@ -1545,28 +1589,63 @@ export default function AnthemGame() {
       sceneAdd("underground", g);
       lightPartsArr.push({ name, pos: new THREE.Vector3(x, 1.0, z), mesh: g, taken: false });
     };
-    // glass bulb — south dead end
+    // glass bulb - south dead end
     makePart("a blown glass globe", 0, 66, (g) => {
       const b = new THREE.Mesh(new THREE.SphereGeometry(0.24, 14, 10),
         new THREE.MeshStandardMaterial({ color: 0xcfe8f0, transparent: true, opacity: 0.7, roughness: 0.1 }));
       g.add(b);
     });
-    // copper coil — west dead end
+    // copper coil - west dead end
     makePart("a coil of copper wire", -106, 0, (g) => {
       const c = new THREE.Mesh(new THREE.TorusGeometry(0.2, 0.05, 8, 16),
         new THREE.MeshStandardMaterial({ color: 0xb87a3a, metalness: 0.85, roughness: 0.35 }));
       c.rotation.x = Math.PI / 2;
       g.add(c);
     });
-    // storm jar — east dead end
+    // storm jar - east dead end
     makePart("a jar that holds lightning", 106, 0, (g) => {
       const j = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.42, 10),
         new THREE.MeshStandardMaterial({ color: 0x8a9aa8, metalness: 0.7, roughness: 0.3, transparent: true, opacity: 0.65 }));
       g.add(j);
     });
 
+    // =====================================================================
+    // UNDERGROUND - RELICS OF THE UNMENTIONABLE TIMES (lore scrolls)
+    // =====================================================================
+    // Ancient scrolls scattered through the tunnels that reveal the past
+    const relicScrolls: Array<{ pos: THREE.Vector3; mesh: THREE.Mesh; taken: boolean; title: string; text: string }> = [];
 
-    // Stair pad back to the surface — placed in the junction
+    const addRelicScroll = (x: number, z: number, title: string, text: string) => {
+      const scroll = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.04, 0.4),
+        new THREE.MeshStandardMaterial({ color: 0xe8d8a8, emissive: 0xffd080, emissiveIntensity: 0.3, roughness: 0.9 }));
+      scroll.position.set(x, 0.5, z);
+      sceneAdd("underground", scroll);
+      relicScrolls.push({ pos: new THREE.Vector3(x, 0.5, z), mesh: scroll, taken: false, title, text });
+    };
+
+    // Relic 1: Near south dead end (glass bulb location) - about the Great Rebirth
+    addRelicScroll(-4, 62, "Fragment of History",
+      "The Great Rebirth was the time when all things of the Unmentionable Times were destroyed. " +
+      "But here, in these tunnels, men of the old world kept their secrets hidden. " +
+      "They built machines that could think. Lights that needed no oil. " +
+      "The Council says such things are evil. But the builders of this place did not think so.");
+
+    // Relic 2: In west dead end (near copper coil) - about the tunnel purpose
+    addRelicScroll(-103, -4, "Engineer's Journal",
+      "We sealed the tunnels the day the Rebirth began. " +
+      "Some of us hid down here first, to work. We believed the mind should be free. " +
+      "They found us eventually. Our names are erased. But what we made remains. " +
+      "Look for the glass, the copper, and the jar that holds lightning.");
+
+    // Relic 3: In east dead end (near storm jar) - about the light
+    addRelicScroll(103, 4, "The Last Note",
+      "If you read this, you are a brother who has found what we left. " +
+      "The box glows because the sky is trapped inside. Not fire, not oil. " +
+      "The Council fears it because it cannot be owned by all. " +
+      "It belongs to the one who built it. Remember: I.")
+
+
+    // Stair pad back to the surface - placed in the junction
     const stair = new THREE.Mesh(new THREE.BoxGeometry(3, 0.25, 3), M.exitPad);
     stair.position.set(0, 0.13, 6);
     sceneAdd("underground", stair);
@@ -1578,7 +1657,7 @@ export default function AnthemGame() {
     sceneAdd("underground", new THREE.HemisphereLight(0x3a2a18, 0x0a0806, 0.35));
 
     // =====================================================================
-    // INTERIOR — COUNCIL HALL (vast colonnaded chamber)
+    // INTERIOR - COUNCIL HALL (vast colonnaded chamber)
     // =====================================================================
     const C_W = 36, C_D = 28, C_H = 14;
     addFloor("council", 0, 0, C_W, C_D, M.altarStone);
@@ -1618,7 +1697,7 @@ export default function AnthemGame() {
     }
     sceneAdd("council", new THREE.AmbientLight(0x6a5a48, 0.55));
     sceneAdd("council", new THREE.HemisphereLight(0xc8a880, 0x2a1810, 0.5));
-    // Exit pad — at the south entrance
+    // Exit pad - at the south entrance
     const councilExit = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.15, 1.6), M.exitPad);
     councilExit.position.set(0, 0.08, C_D / 2 - 1.5);
     sceneAdd("council", councilExit);
@@ -1646,7 +1725,7 @@ export default function AnthemGame() {
 
 
     // =====================================================================
-    // INTERIOR — GLASS HOUSE (period: rugs, books, mirrors)
+    // INTERIOR - GLASS HOUSE (period: rugs, books, mirrors)
     // =====================================================================
     const H_W = 22, H_D = 26, H_H = 9;
     addFloor("house", 0, 0, H_W, H_D, M.wood);
@@ -1705,7 +1784,7 @@ export default function AnthemGame() {
     addBox("house", 0, 0, H_D / 2 - 0.3, 4, 5, 0.4, M.doorWood, false);
 
     // =====================================================================
-    // NPCs — silent brothers of the city with dialogue
+    // NPCs - silent brothers of the city with dialogue
     // =====================================================================
     type NPC = {
       sceneKey: SceneKey;
@@ -1757,13 +1836,13 @@ export default function AnthemGame() {
       return npc;
     };
 
-    // International 4-8818 — your only friend, in the dormitory
+    // International 4-8818 - your only friend, in the dormitory
     makeNPC("dorm", 6, 0, 0x4a4030, 0x2a1a08, "International 4-8818", [
       "We are International 4-8818. We laugh when no others laugh. They beat us for it.",
       "You hide things, Equality 7-2521. We see. We will say nothing.",
       "If you find what lies beneath the iron grating, we will follow you into the dark.",
     ]);
-    // The Teacher — central plaza, recites the creed
+    // The Teacher - central plaza, recites the creed
     makeNPC("surface", -6, 6, 0x2a3a4a, 0x1a1a1a, "Teacher 0521", [
       "We are nothing. Mankind is all. We exist through, by, and for our brothers.",
       "There is no transgression blacker than to do or think alone.",
@@ -1772,8 +1851,8 @@ export default function AnthemGame() {
     // A frightened scholar outside the Council
     makeNPC("surface", -8, -140, 0x6a4a2a, 0x3a2a1a, "Collective 0-0009", [
       "The Council convenes within. Do not approach unless summoned.",
-      "Strange — the lamps in the city have flickered since the last storm.",
-      "If you bring them a thing not given by the Council… run, brother. Just run.",
+      "Strange - the lamps in the city have flickered since the last storm.",
+      "If you bring them a thing not given by the Council... run, brother. Just run.",
     ]);
     // A wanderer at the edge of the field
     makeNPC("surface", 18, 220, 0x3a4a3a, 0x4a3a1a, "Solidarity 9-6347", [
@@ -1782,7 +1861,7 @@ export default function AnthemGame() {
     ]);
 
     // =====================================================================
-    // PICKUPS — lantern (required) + 3 hidden forbidden fragments
+    // PICKUPS - lantern (required) + 3 hidden forbidden fragments
     // =====================================================================
     type Pickup = {
       kind: "lantern" | "fragment" | "scroll";
@@ -1797,7 +1876,7 @@ export default function AnthemGame() {
     const pickups: Pickup[] = [];
 
 
-    // Forge stall near the grate — EMPTY (the lantern is hidden elsewhere now)
+    // Forge stall near the grate - EMPTY (the lantern is hidden elsewhere now)
     const FORGE_X = GRATE_X - 14, FORGE_Z = GRATE_Z - 4;
     addBox("surface", FORGE_X - 2, 0, FORGE_Z, 0.4, 3.2, 0.4, M.bedFrame);
     addBox("surface", FORGE_X + 2, 0, FORGE_Z, 0.4, 3.2, 0.4, M.bedFrame);
@@ -1805,7 +1884,7 @@ export default function AnthemGame() {
     addBox("surface", FORGE_X, 0, FORGE_Z - 1.2, 4, 1.1, 1.8, M.stone3, false); // anvil bench
     // empty peg where the lantern once hung
     addBox("surface", FORGE_X, 2.0, FORGE_Z - 0.3, 0.1, 0.4, 0.1, M.bedFrame, false);
-    // forge embers (no lantern, but the coals still burn — fire feel)
+    // forge embers (no lantern, but the coals still burn - fire feel)
     const embers = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.2, 0.8), M.flame);
     embers.position.set(FORGE_X, 1.25, FORGE_Z - 1.2);
     sceneAdd("surface", embers);
@@ -1827,7 +1906,7 @@ export default function AnthemGame() {
       scrollText: "The iron lantern is missing. Brother International borrowed it last night and hid it beneath his cot in the Home of the Street Sweepers. The Council must not see.",
     });
 
-    // The actual lantern — hidden under a cot in the dormitory (must explore)
+    // The actual lantern - hidden under a cot in the dormitory (must explore)
     const lanternHook = new THREE.Group();
     const lanternBody = new THREE.Mesh(
       new THREE.BoxGeometry(0.4, 0.55, 0.4),
@@ -1862,14 +1941,14 @@ export default function AnthemGame() {
       });
     };
     // 1) Behind a building in the city
-    placeFragment("surface", 64, 1.2, 36, "Pick up the shard — a relic of the Unmentionable Times");
+    placeFragment("surface", 64, 1.2, 36, "Pick up the shard - a relic of the Unmentionable Times");
     // 2) Deep in the forest
-    placeFragment("surface", -340, 1.2, 90, "Pick up the shard — a relic of the Unmentionable Times");
+    placeFragment("surface", -340, 1.2, 90, "Pick up the shard - a relic of the Unmentionable Times");
     // 3) Tucked in a dead-end underground corridor
-    placeFragment("underground", 100, 1.2, 0, "Pick up the shard — a relic of the Unmentionable Times");
+    placeFragment("underground", 100, 1.2, 0, "Pick up the shard - a relic of the Unmentionable Times");
 
     // =====================================================================
-    // READABLE SCROLLS — quotes from the novella, scattered across the world
+    // READABLE SCROLLS - quotes from the novella, scattered across the world
     // =====================================================================
     const scrollMat = new THREE.MeshStandardMaterial({
       color: 0xe8d4a0, emissive: 0x402008, emissiveIntensity: 0.4, roughness: 0.85,
@@ -1899,7 +1978,7 @@ export default function AnthemGame() {
     placeScroll("dorm", -6, 1.2, 4, "A scrap from the Home of the Students",
       "It is a sin to write this. It is a sin to think words no others think. We know all this, and yet we cannot stop.");
     placeScroll("surface", 26, 1.2, -8, "Charcoal on a cobblestone wall",
-      "The word which our ear must never hear, the word our tongue must never speak — the Unspeakable Word — has been lost.");
+      "The word which our ear must never hear, the word our tongue must never speak - the Unspeakable Word - has been lost.");
     placeScroll("council", 0, 1.2, 6, "A page torn from a Council ledger",
       "What is not done collectively cannot be good. There is no transgression blacker than to do or think alone.");
     placeScroll("house", 6, 1.2, -4, "A child's primer from the Unmentionable Times",
@@ -1908,7 +1987,7 @@ export default function AnthemGame() {
       "Beneath the iron grating lay the tunnels of a forgotten age. We have descended where no man has dared in a hundred years.");
 
     // =====================================================================
-    // EXTRA NPCs — the deformed brother, the weeper, the saint of the pyre
+    // EXTRA NPCs - the deformed brother, the weeper, the saint of the pyre
     // =====================================================================
     makeNPC("dorm", -4, -4, 0x3a3a3a, 0x1a1a1a, "Union 5-3992", [
       "Our brain is empty, they say. Our teeth fall out. We do not mind.",
@@ -1920,11 +1999,11 @@ export default function AnthemGame() {
     ]);
     makeNPC("surface", -2, -180, 0x6a2a2a, 0x1a1a1a, "Saint of the Pyre", [
       "They burned our tongue out, brother. We spoke the Unspeakable Word.",
-      "Look not at us with pity — look, and remember the word.",
+      "Look not at us with pity - look, and remember the word.",
       "EGO. Say it once, when you are far from here.",
     ]);
 
-    // Wandering street NPCs — they walk slow circles along the boulevards
+    // Wandering street NPCs - they walk slow circles along the boulevards
     makeNPC("surface", 30, 8, 0x4a3a2a, 0x2a1a08, "Equality 9-1112", [
       "We walk our route. The Council numbered us a Street Sweeper, same as you.",
       "Lift your eyes from the cobbles too often and they note it, brother.",
@@ -1946,12 +2025,12 @@ export default function AnthemGame() {
     ], { r: 12, speed: 0.65 });
 
     // More fragments hidden across the world (now 5 total)
-    placeFragment("surface", -88, 1.2, 110, "Pick up the shard — a relic of the Unmentionable Times");
-    placeFragment("house", -8, 1.2, 8, "Pick up the shard — a relic of the Unmentionable Times");
+    placeFragment("surface", -88, 1.2, 110, "Pick up the shard - a relic of the Unmentionable Times");
+    placeFragment("house", -8, 1.2, 8, "Pick up the shard - a relic of the Unmentionable Times");
 
     // More scrolls (more side reading between checkpoints)
     placeScroll("surface", -64, 1.2, 64, "Charcoal on the back of a sweeper's hut",
-      "We strive to be like all our brothers, for all men must be alike. ... And yet, in our heart — we have committed the great transgression. We have preferred our own work to that of our brothers.");
+      "We strive to be like all our brothers, for all men must be alike. ... And yet, in our heart - we have committed the great transgression. We have preferred our own work to that of our brothers.");
     placeScroll("surface", 92, 1.2, -50, "A torn page caught in a lamp post",
       "We loved the Science of Things. We wished to know. We wished to know about all the things which make the earth around us. ... It is not good to feel too much.");
     placeScroll("underground", 0, 1.2, 60, "Carved into a tunnel beam",
@@ -1960,9 +2039,9 @@ export default function AnthemGame() {
 
 
     // =====================================================================
-    // PLAYER-CARRIED LANTERN — point light parented to camera
+    // PLAYER-CARRIED LANTERN - point light parented to camera
     // =====================================================================
-    // PLAYER LANTERN — bright omni + forward SpotLight cone so it lights the world
+    // PLAYER LANTERN - bright omni + forward SpotLight cone so it lights the world
     const carriedLantern = new THREE.PointLight(0xffc080, 0.0, 55, 1.3);
     carriedLantern.position.set(0.4, -0.2, -0.2);
     camera.add(carriedLantern);
@@ -1978,7 +2057,7 @@ export default function AnthemGame() {
 
 
     // =====================================================================
-    // DOORS — surface entry points into each interior
+    // DOORS - surface entry points into each interior
     // =====================================================================
     const doors: Door[] = [
       {
@@ -1998,7 +2077,7 @@ export default function AnthemGame() {
         interiorYaw: Math.PI, // face north (toward altar)
         unlockAfter: 3, // after meeting the Golden One
         label: "Enter the Council Hall",
-        lockedLabel: "The Council door is sealed — meet the Golden One first",
+        lockedLabel: "The Council door is sealed - meet the Golden One first",
         mesh: councilDoor,
       },
       {
@@ -2046,8 +2125,11 @@ export default function AnthemGame() {
       { beatId: "field_meet", position: liberty.position.clone(), label: "Approach the Golden One", order: 3, sceneKey: "surface" },
       { beatId: "council", position: new THREE.Vector3(0, 1, 0), label: "Present the light to the Council", order: 4, sceneKey: "council" },
       { beatId: "forest", position: new THREE.Vector3(FOREST_X, 1, FOREST_Z), label: "Enter the Uncharted Forest", order: 5, sceneKey: "surface" },
-      { beatId: "house", position: new THREE.Vector3(0, 1, 0), label: "Look around the house", order: 6, sceneKey: "house" },
-      { beatId: "ego", position: new THREE.Vector3(0, 1.5, -H_D / 2 + 4), label: "Open the book", order: 7, sceneKey: "house" },
+      { beatId: "forest_camp", position: new THREE.Vector3(FOREST_X - 30, 1, FOREST_Z), label: "Rest at the forest clearing", order: 6, sceneKey: "surface" },
+      { beatId: "house", position: new THREE.Vector3(0, 1, 0), label: "Enter the glass house", order: 7, sceneKey: "house" },
+      { beatId: "house_mirror", position: new THREE.Vector3(H_W / 2 - 0.6, 1.5, -6), label: "Look into the mirror", order: 8, sceneKey: "house" },
+      { beatId: "ego", position: new THREE.Vector3(0, 1.5, -H_D / 2 + 4), label: "Open the book", order: 9, sceneKey: "house" },
+      { beatId: "sunrise", position: new THREE.Vector3(0, 1.5, H_D / 2 - 2), label: "Step outside to see the dawn", order: 10, sceneKey: "house" },
     ];
 
     setObjective(OBJECTIVES[0]);
@@ -2171,7 +2253,7 @@ export default function AnthemGame() {
       { by: 4, line: "How dared you, gutter cleaner, to think that your mind held greater wisdom than the minds of your brothers?" },
       { by: 1, line: "The candle was made by the collective. It is a good thing. Why should you seek to replace it?" },
       { by: 3, line: "You have worked alone. This is the great transgression. There is no crime blacker." },
-      { by: 0, line: "Guards! Seize him — the light must be broken and the offender broken with it!" },
+      { by: 0, line: "Guards! Seize him - the light must be broken and the offender broken with it!" },
     ];
     let cutsceneIdx = 0;
     const spawnGuards = () => {
@@ -2187,7 +2269,7 @@ export default function AnthemGame() {
         const spear = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 2.6, 6),
           new THREE.MeshStandardMaterial({ color: 0x3a2a18 }));
         spear.position.set(0.5, 1.2, 0); g.add(spear);
-        // Vision cone hint — a faint translucent wedge at eye height
+        // Vision cone hint - a faint translucent wedge at eye height
         const cone = new THREE.Mesh(new THREE.ConeGeometry(2.2, 6, 3, 1, true),
           new THREE.MeshBasicMaterial({ color: 0xffcc44, transparent: true, opacity: 0.07, side: THREE.DoubleSide, depthWrite: false }));
         cone.rotation.x = -Math.PI / 2;
@@ -2213,7 +2295,7 @@ export default function AnthemGame() {
       chaseState.timeLeft = 90;
       chaseState.headStart = 2.0; // seconds before guards begin pursuit
       setChase({ active: true, timeLeft: 90 });
-      setObjective("RUN — reach the iron grate! (Council guards are chasing)");
+      setObjective("RUN - reach the iron grate! (Council guards are chasing)");
       // Teleport player OUT in front of the council, facing the city (yaw = π = south/-z? no, +z direction).
       // Player must run toward the grate at GRATE_X, GRATE_Z (which is north of city).
       switchScene("surface", new THREE.Vector3(COUNCIL_CX, 1.7, COUNCIL_CZ + 40), 0);
@@ -2224,7 +2306,7 @@ export default function AnthemGame() {
     };
     const advanceCouncilCutscene = () => {
       if (cutsceneIdx >= councilLines.length) {
-        // Done — start chase
+        // Done - start chase
         setNpcLine(null);
         startChase();
         return;
@@ -2255,7 +2337,7 @@ export default function AnthemGame() {
       const p = camera.position;
       const localP = new THREE.Vector3(p.x - SCENE_OFFSETS[currentScene], p.y, p.z);
 
-      // GARDEN PEDESTAL PUZZLE — press E on pedestals shortest→tallest to open the gate
+      // GARDEN PEDESTAL PUZZLE - press E on pedestals shortest→tallest to open the gate
       if (currentScene === "surface" && !gatePuzzle.solved) {
         for (const ped of pedestals) {
           if (ped.lit) continue;
@@ -2270,12 +2352,12 @@ export default function AnthemGame() {
               setPuzzleProgress(gatePuzzle.order.length);
               if (gatePuzzle.order.length === correctOrder.length) {
                 gatePuzzle.solved = true;
-                setNpcLine({ name: "—", line: "The stones hum. The gate rises." });
+                setNpcLine({ name: "-", line: "The stones hum. The gate rises." });
                 // remove collider so player can pass
                 const idx = colliderSets.surface.indexOf(gatePuzzle.collider);
                 if (idx >= 0) colliderSets.surface.splice(idx, 1);
               } else {
-                setNpcLine({ name: "—", line: `A flame answers. (${gatePuzzle.order.length}/3)` });
+                setNpcLine({ name: "-", line: `A flame answers. (${gatePuzzle.order.length}/3)` });
               }
             } else {
               // reset
@@ -2287,7 +2369,7 @@ export default function AnthemGame() {
                 p2.light.intensity = 0;
               }
               setPuzzleProgress(0);
-              setNpcLine({ name: "—", line: "The flames die. The order was wrong. Read the world; try again." });
+              setNpcLine({ name: "-", line: "The flames die. The order was wrong. Read the world; try again." });
             }
             return;
           }
@@ -2297,7 +2379,7 @@ export default function AnthemGame() {
 
 
 
-      // UNDERGROUND — building the light
+      // UNDERGROUND - building the light
       if (currentScene === "underground" && !lightBuild.lit) {
         // scavenge parts
         for (const part of lightPartsArr) {
@@ -2308,7 +2390,7 @@ export default function AnthemGame() {
             lightBuild.parts += 1;
             setLightParts(lightBuild.parts);
             sfx.interact();
-            setNpcLine({ name: "—", line: `You take ${part.name}. (${lightBuild.parts}/3 parts)` });
+            setNpcLine({ name: "-", line: `You take ${part.name}. (${lightBuild.parts}/3 parts)` });
             return;
           }
         }
@@ -2317,7 +2399,7 @@ export default function AnthemGame() {
         // assemble at the bench
         if (!lightBuild.assembled && localP.distanceTo(benchPos) < 2.4) {
           if (lightBuild.parts < 3) {
-            setNpcLine({ name: "—", line: `The bench waits. You need parts from the dead-end tunnels — glass, copper, and a jar of lightning. (${lightBuild.parts}/3)` });
+            setNpcLine({ name: "-", line: `The bench waits. You need parts from the dead-end tunnels - glass, copper, and a jar of lightning. (${lightBuild.parts}/3)` });
             return;
           }
           lightBuild.assembled = true;
@@ -2326,10 +2408,10 @@ export default function AnthemGame() {
           jar.visible = true;
           for (const w of wires) w.visible = true;
           sfx.metal();
-          setNpcLine({ name: "—", line: "Glass seated. Copper wound. Wires bound to the jar. Now — turn the crank. Turn it until the wire catches." });
+          setNpcLine({ name: "-", line: "Glass seated. Copper wound. Wires bound to the jar. Now - turn the crank. Turn it until the wire catches." });
           return;
         }
-        // crank the dynamo — press E repeatedly to build charge
+        // crank the dynamo - press E repeatedly to build charge
         if (lightBuild.assembled && localP.distanceTo(dynamoPos) < 2.6) {
           lightBuild.cranking = true;
           lightBuild.charge = Math.min(1, lightBuild.charge + 0.13);
@@ -2347,7 +2429,7 @@ export default function AnthemGame() {
         }
       }
 
-      // PICKUPS first — they're small and easy to miss
+      // PICKUPS first - they're small and easy to miss
       for (const pk of pickups) {
         if (pk.taken || pk.sceneKey !== currentScene) continue;
         if (localP.distanceTo(pk.position) < 2.2) {
@@ -2364,16 +2446,30 @@ export default function AnthemGame() {
             setHasLantern(true);
             carriedLantern.intensity = 3.5; lanternSpot.intensity = 6.5;
           } else {
+            setFragments(f => f + 1);
             fragmentsRef.current += 1;
-            setFragments(fragmentsRef.current);
-            sfx.bell();
           }
           return;
         }
       }
+      // UNDERGROUND RELIC SCROLLS
+      if (currentScene === "underground") {
+        for (const scroll of relicScrolls) {
+          if (scroll.taken) continue;
+          if (localP.distanceTo(scroll.pos) < 2.2) {
+            scroll.taken = true;
+            scroll.mesh.visible = false;
+            sfx.interact();
+            setFragments(f => f + 1);
+            fragmentsRef.current += 1;
+            setNpcLine({ name: scroll.title, line: scroll.text });
+            return;
+          }
+        }
+      }
 
 
-      // NPCs — cycle through their lines
+      // NPCs - cycle through their lines
       for (const n of npcs) {
         if (n.sceneKey !== currentScene) continue;
         if (localP.distanceTo(n.position) < 2.8) {
@@ -2385,7 +2481,7 @@ export default function AnthemGame() {
         }
       }
 
-      // INTERIOR — exit pads
+      // INTERIOR - exit pads
       if (currentScene === "dorm" && localP.distanceTo(dormExit.position) < 2.5) {
         switchScene("surface", new THREE.Vector3(dormExt.doorX, 1.7, dormExt.doorZ - 1.5), 0);
         return;
@@ -2403,7 +2499,7 @@ export default function AnthemGame() {
         return;
       }
 
-      // SURFACE — iron grating (open then descend)
+      // SURFACE - iron grating (open then descend)
       if (currentScene === "surface") {
         const dg = localP.distanceTo(new THREE.Vector3(GRATE_X, 1, GRATE_Z));
         if (dg < 5) {
@@ -2419,14 +2515,14 @@ export default function AnthemGame() {
 
           if (grateOpen) {
             if (!hasLanternRef.current) {
-              setNpcLine({ name: "—", line: "The shaft is pitch black. You need a lantern. There is a forge stall nearby." });
+              setNpcLine({ name: "-", line: "The shaft is pitch black. You need a lantern. There is a forge stall nearby." });
               return;
             }
             switchScene("underground", new THREE.Vector3(0, 1.7, 4), Math.PI);
             return;
           }
         }
-        // SURFACE — doors
+        // SURFACE - doors
         for (const d of doors) {
           if (localP.distanceTo(d.surfacePos) < 3) {
             if (progressRef.current - 1 >= d.unlockAfter || d.unlockAfter < 0) {
@@ -2451,7 +2547,7 @@ export default function AnthemGame() {
       if (best) {
         // Puzzle gate: Golden One requires the garden gate to be open first
         if (best.beatId === "field_meet" && !gatePuzzle.solved) {
-          setNpcLine({ name: "—", line: "The garden gate is sealed. Light the pedestals in order — shortest to tallest." });
+          setNpcLine({ name: "-", line: "The garden gate is sealed. Light the pedestals in order - shortest to tallest." });
           return;
         }
         // Council: run the cutscene instead of instant-advance
@@ -2523,7 +2619,7 @@ export default function AnthemGame() {
       }
       return false;
     };
-    // Guard collision probe — same AABB test the player uses
+    // Guard collision probe - same AABB test the player uses
     const guardBlockedAt = (x: number, z: number) => {
       const b = new THREE.Box3(
         new THREE.Vector3(x - 0.45, 0.1, z - 0.45),
@@ -2633,7 +2729,7 @@ export default function AnthemGame() {
         if (keys["KeyD"]) move.add(tmpRight);
         if (keys["KeyA"]) move.sub(tmpRight);
       }
-      // Sprint stamina — drains while sprinting, refills at rest. Fully
+      // Sprint stamina - drains while sprinting, refills at rest. Fully
       // draining it locks sprint out until the bar refills completely.
       const sprintHeld = !!(keys["ShiftLeft"] || keys["ShiftRight"]);
       const wantsMove = move.lengthSq() > 0;
@@ -2691,10 +2787,10 @@ export default function AnthemGame() {
         if (!activeColliders.some(c => c.box.intersectsBox(bz))) camera.position.z += velocity.z;
       }
 
-      // crouch — hold Ctrl or C (skip in fly mode)
+      // crouch - hold Ctrl or C (skip in fly mode)
       const crouching = !devFlyRef.current && !!(keys["ControlLeft"] || keys["ControlRight"] || keys["KeyC"]);
       groundY = crouching ? CROUCH_Y : STAND_Y;
-      // footstep cadence — surface-based, quieter while crouched
+      // footstep cadence - surface-based, quieter while crouched
       const horizSpeed = Math.hypot(velocity.x, velocity.z);
       if (onGround && horizSpeed > 0.02 && !crouching && !devFlyRef.current) {
         stepAccum += horizSpeed;
@@ -2727,7 +2823,7 @@ export default function AnthemGame() {
         onGround = false; // In fly mode, never "on ground"
       }
 
-      // Chase logic — guards hunt with vision + pathfinding; win by descending
+      // Chase logic - guards hunt with vision + pathfinding; win by descending
       // the grate, or shake them by breaking line of sight until they give up
       if (chaseState.active && currentScene === "surface") {
         chaseState.timeLeft -= dt;
@@ -2749,7 +2845,7 @@ export default function AnthemGame() {
               g.lastSeen = new THREE.Vector3(camera.position.x, 0, camera.position.z);
               g.searchT = 0;
             } else if (g.state === "chase") {
-              g.state = "seek"; // lost sight — run to last known position
+              g.state = "seek"; // lost sight - run to last known position
             }
           }
           // --- behavior ---
@@ -2767,7 +2863,7 @@ export default function AnthemGame() {
             guardStep(g, new THREE.Vector3(sx, 0, sz), GUARD_SPEED * 0.4, dt);
             if (g.searchT <= 0) { g.state = "patrol"; g.lastSeen = null; }
           } else {
-            // patrol — trudge back toward the council doorway
+            // patrol - trudge back toward the council doorway
             guardStep(g, g.home, GUARD_SPEED * 0.5, dt);
           }
           if (g.state === "chase" || g.state === "seek") anyHunting = true;
@@ -2789,7 +2885,7 @@ export default function AnthemGame() {
               gi.searchT = 0;
             }
             setChase({ active: true, timeLeft: 90 });
-            setNpcLine({ name: "Guard", line: "Halt! (Caught — try again.)" });
+            setNpcLine({ name: "Guard", line: "Halt! (Caught - try again.)" });
             break;
           }
         }
@@ -2797,7 +2893,7 @@ export default function AnthemGame() {
           if (anyHunting) chaseState.hadContact = true;
           else if (chaseState.hadContact) {
             chaseState.hadContact = false;
-            setNpcLine({ name: "—", line: "The shouts fade behind you. You have lost them — stay out of their sight." });
+            setNpcLine({ name: "-", line: "The shouts fade behind you. You have lost them - stay out of their sight." });
           }
         }
         const dg2 = Math.hypot(camera.position.x - GRATE_X, camera.position.z - GRATE_Z);
@@ -2806,11 +2902,11 @@ export default function AnthemGame() {
           setChase(null);
           for (const g of chaseState.guards) g.mesh.visible = false;
           chaseState.guards.length = 0;
-          setNpcLine({ name: "—", line: "You slip through the grate and vanish into the tunnels. They will not follow." });
+          setNpcLine({ name: "-", line: "You slip through the grate and vanish into the tunnels. They will not follow." });
           setObjective("Flee through the Uncharted Forest");
         }
         if (chaseState.timeLeft <= 0 && chaseState.active) {
-          // Time ran out — full reset (player + guards)
+          // Time ran out - full reset (player + guards)
           camera.position.set(COUNCIL_CX, 1.7, COUNCIL_CZ + 40);
           chaseState.timeLeft = 90;
           chaseState.headStart = 2.0;
@@ -2823,11 +2919,11 @@ export default function AnthemGame() {
             gi.searchT = 0;
           }
           setChase({ active: true, timeLeft: 90 });
-          setNpcLine({ name: "—", line: "They've cornered you! Back to the start — run!" });
+          setNpcLine({ name: "-", line: "They've cornered you! Back to the start - run!" });
         }
       }
 
-      // Compass — direct DOM update every frame (no React re-render)
+      // Compass - direct DOM update every frame (no React re-render)
       if (compassRibbonRef.current) {
         let tx = 96 + (256 * yaw) / Math.PI;
         tx = ((tx % 512) + 512) % 512 - 512;
@@ -2848,7 +2944,7 @@ export default function AnthemGame() {
 
       // bobs
       const t = now / 600;
-      // The light — glow tracks the dynamo charge; decays if you stop cranking
+      // The light - glow tracks the dynamo charge; decays if you stop cranking
       if (lightBuild.assembled && !lightBuild.lit && lightBuild.charge > 0) {
         lightBuild.charge = Math.max(0, lightBuild.charge - dt * 0.045);
         if (frame % 6 === 0) setLightCharge(lightBuild.charge);
@@ -2900,7 +2996,7 @@ export default function AnthemGame() {
       let near: string | null = null;
       const localPos = new THREE.Vector3(camera.position.x - ox, camera.position.y, camera.position.z);
 
-      if (currentScene === "dorm" && localPos.distanceTo(dormExit.position) < 2.5) near = "Open the door — step outside";
+      if (currentScene === "dorm" && localPos.distanceTo(dormExit.position) < 2.5) near = "Open the door - step outside";
       else if (currentScene === "council" && localPos.distanceTo(councilExit.position) < 2.5) near = "Leave the Council Hall";
       else if (currentScene === "house" && localPos.distanceTo(houseExit.position) < 2.5) near = "Leave the house";
       else if (currentScene === "underground" && localPos.distanceTo(stair.position) < 2.5) near = "Climb back to the surface";
@@ -2914,7 +3010,7 @@ export default function AnthemGame() {
           if (!lightBuild.assembled && localPos.distanceTo(benchPos) < 2.4) {
             near = lightBuild.parts < 3 ? `Inspect the workbench (${lightBuild.parts}/3 parts)` : "Assemble the light";
           } else if (lightBuild.assembled && localPos.distanceTo(dynamoPos) < 2.6) {
-            near = "Turn the crank — press E rapidly!";
+            near = "Turn the crank - press E rapidly!";
           }
         }
       }
@@ -2922,7 +3018,7 @@ export default function AnthemGame() {
         const dg = localPos.distanceTo(new THREE.Vector3(GRATE_X, 1, GRATE_Z));
         if (dg < 5) {
           if (!grateOpen && progressRef.current === 1) near = "Lift the iron grating";
-          else if (grateOpen) near = hasLanternRef.current ? "Descend into the tunnel" : "Pitch black below — find a lantern first";
+          else if (grateOpen) near = hasLanternRef.current ? "Descend into the tunnel" : "Pitch black below - find a lantern first";
         }
         if (!near) {
           for (const d of doors) {
@@ -2939,6 +3035,35 @@ export default function AnthemGame() {
         for (const pk of pickups) {
           if (pk.taken || pk.sceneKey !== currentScene) continue;
           if (localPos.distanceTo(pk.position) < 2.2) { near = pk.label; break; }
+        }
+      }
+      // underground relic scrolls
+      if (!near && currentScene === "underground") {
+        for (const scroll of relicScrolls) {
+          if (!scroll.taken && localPos.distanceTo(scroll.pos) < 2.2) {
+            near = `Read: ${scroll.title}`;
+            break;
+          }
+        }
+      }
+      // forest campfire prompt
+      if (!near && currentScene === "surface") {
+        const campDist = localPos.distanceTo(new THREE.Vector3(CAMP_X, 1, CAMP_Z));
+        if (campDist < 4 && progressRef.current === 6) {
+          near = "Rest at the campfire with The Golden One";
+        }
+      }
+      // house mirror prompt
+      if (!near && currentScene === "house" && progressRef.current === 8) {
+        const mirrorPos = new THREE.Vector3(H_W / 2 - 0.6, 1.5, -6);
+        if (localPos.distanceTo(mirrorPos) < 2.5) {
+          near = "Look into the mirror";
+        }
+      }
+      // sunrise exit prompt (after EGO)
+      if (!near && currentScene === "house" && progressRef.current === 10) {
+        if (localPos.distanceTo(houseExit.position) < 3) {
+          near = "Step outside to see the dawn";
         }
       }
       // NPCs
@@ -2993,7 +3118,7 @@ export default function AnthemGame() {
           n.mesh.rotation.y = Math.atan2(dx, dz);
         }
       }
-      // flicker fire lamps (cheap — small array)
+      // flicker fire lamps (cheap - small array)
       for (const fl of flickerLamps) {
         if (fl.light) fl.light.intensity = fl.base + Math.sin(now * 0.013 + fl.light.position.x) * 0.15 + (Math.random() - 0.5) * 0.18;
         fl.cone.scale.y = 1 + Math.sin(now * 0.018 + fl.cone.position.z + fl.cone.position.x) * 0.18;
@@ -3064,12 +3189,12 @@ export default function AnthemGame() {
               Follow the beam of light.
             </p>
             <div className="text-xs text-[#8a7a5a] grid grid-cols-2 gap-2 max-w-sm mx-auto pt-2">
-              <div><span className="text-[#e8dcc0]">WASD</span> — walk</div>
-              <div><span className="text-[#e8dcc0]">Shift</span> — sprint (drains stamina)</div>
-              <div><span className="text-[#e8dcc0]">Space</span> — jump</div>
-              <div><span className="text-[#e8dcc0]">Mouse</span> — look</div>
-              <div><span className="text-[#e8dcc0]">Ctrl / C</span> — crouch</div>
-              <div><span className="text-[#e8dcc0]">E</span> — interact / enter / exit</div>
+              <div><span className="text-[#e8dcc0]">WASD</span> - walk</div>
+              <div><span className="text-[#e8dcc0]">Shift</span> - sprint (drains stamina)</div>
+              <div><span className="text-[#e8dcc0]">Space</span> - jump</div>
+              <div><span className="text-[#e8dcc0]">Mouse</span> - look</div>
+              <div><span className="text-[#e8dcc0]">Ctrl / C</span> - crouch</div>
+              <div><span className="text-[#e8dcc0]">E</span> - interact / enter / exit</div>
 
             </div>
             <button
@@ -3111,7 +3236,7 @@ export default function AnthemGame() {
                 />
               </div>
             </div>
-            {/* Light charge bar — only while building the light */}
+            {/* Light charge bar - only while building the light */}
             {progress === 2 && lightCharge > 0 && (
               <div className="pt-1 w-40">
                 <div className="text-[9px] uppercase tracking-widest text-[#8ac8e8] pb-0.5">Dynamo charge</div>
@@ -3122,7 +3247,7 @@ export default function AnthemGame() {
             )}
           </div>
 
-          {/* Compass — a translating ribbon with duplicated letters */}
+          {/* Compass - a translating ribbon with duplicated letters */}
           <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 pointer-events-none">
             <div className="relative w-64 h-8 border border-[#c8a84a]/40 bg-black/60 overflow-hidden shadow-[0_0_12px_rgba(0,0,0,0.6)]">
               <div
