@@ -2914,21 +2914,13 @@ export default function AnthemGame() {
           advanceTo(5); // Skip to forest chapter
         }
         if (chaseState.timeLeft <= 0 && chaseState.active) {
-          // Time ran out - full reset (player + guards)
-          camera.position.set(COUNCIL_CX, 1.7, COUNCIL_CZ + 40);
-          camera.position.x += 10; // Slightly ahead
-          chaseState.timeLeft = 120; // More time
-          chaseState.headStart = 3.0; // Longer head start
-          chaseState.hadContact = false;
-          for (let i = 0; i < chaseState.guards.length; i++) {
-            const gi = chaseState.guards[i];
-            gi.mesh.position.set(COUNCIL_CX + (i - 1) * 3, 0, COUNCIL_CZ + 22);
-            gi.state = "seek";
-            gi.lastSeen = new THREE.Vector3(COUNCIL_CX, 0, COUNCIL_CZ + 40);
-            gi.searchT = 0;
-          }
-          setChase({ active: true, timeLeft: 120 });
-          setNpcLine({ name: "-", line: "They've cornered you! Back to the start - KEEP RUNNING EAST!" });
+          // Time ran out - guards gave up, player escaped into the forest
+          chaseState.active = false;
+          setChase(null);
+          for (const g of chaseState.guards) g.mesh.visible = false;
+          chaseState.guards.length = 0;
+          advanceTo(5); // Skip to forest chapter
+          setNpcLine({ name: "-", line: "You outran them! The trees swallow you whole. They will not follow." });
         }
       }
 
