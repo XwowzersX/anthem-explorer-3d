@@ -2295,10 +2295,18 @@ export default function AnthemGame() {
       chaseState.timeLeft = 90;
       chaseState.headStart = 2.0; // seconds before guards begin pursuit
       setChase({ active: true, timeLeft: 90 });
-      setObjective("RUN - reach the iron grate! (Council guards are chasing)");
-      // Teleport player OUT in front of the council, facing the city (yaw = π = south/-z? no, +z direction).
-      // Player must run toward the grate at GRATE_X, GRATE_Z (which is north of city).
-      switchScene("surface", new THREE.Vector3(COUNCIL_CX, 1.7, COUNCIL_CZ + 40), 0);
+      setObjective("RUN - reach the iron grate to the EAST! (Guards are chasing)");
+      // Teleport player OUT in front of the council, facing EAST toward the grate
+      // Grate is at (130, 0), spawn player facing east (yaw = -PI/2)
+      switchScene("surface", new THREE.Vector3(COUNCIL_CX, 1.7, COUNCIL_CZ + 40), -Math.PI / 2);
+      // Make sure the grate is open (needed for escape)
+      if (!grateOpen) {
+        grateOpen = true;
+        grateSlideT = 1;
+        grate.position.x = GRATE_X + 4.2;
+        grate.position.y = 0.05;
+        grate.rotation.z = 0.08;
+      }
       spawnGuards();
       // Re-request pointer lock in case cutscene overlay dropped it.
       try { renderer.domElement.requestPointerLock(); } catch { /* ignore */ }
@@ -2872,20 +2880,20 @@ export default function AnthemGame() {
           // --- caught? ---
           const distP = Math.hypot(camera.position.x - g.mesh.position.x, camera.position.z - g.mesh.position.z);
           if (g.state === "chase" && distP < 1.3) {
-            // Caught → full reset with fresh timer
-            camera.position.set(COUNCIL_CX, 1.7, COUNCIL_CZ + 40);
-            chaseState.timeLeft = 90;
-            chaseState.headStart = 2.0;
+            // Caught -> full reset with fresh timer
+            camera.position.set(COUNCIL_CX + 10, 1.7, COUNCIL_CZ + 40);
+            chaseState.timeLeft = 120;
+            chaseState.headStart = 3.0;
             chaseState.hadContact = false;
             for (let i = 0; i < chaseState.guards.length; i++) {
               const gi = chaseState.guards[i];
-              gi.mesh.position.set(COUNCIL_CX + (i - 1) * 3, 0, COUNCIL_CZ + 19);
+              gi.mesh.position.set(COUNCIL_CX + (i - 1) * 3, 0, COUNCIL_CZ + 22);
               gi.state = "seek";
               gi.lastSeen = new THREE.Vector3(COUNCIL_CX, 0, COUNCIL_CZ + 40);
               gi.searchT = 0;
             }
-            setChase({ active: true, timeLeft: 90 });
-            setNpcLine({ name: "Guard", line: "Halt! (Caught - try again.)" });
+            setChase({ active: true, timeLeft: 120 });
+            setNpcLine({ name: "Guard", line: "Halt! (Caught - run EAST toward the grate!)" });
             break;
           }
         }
@@ -2897,29 +2905,30 @@ export default function AnthemGame() {
           }
         }
         const dg2 = Math.hypot(camera.position.x - GRATE_X, camera.position.z - GRATE_Z);
-        if (dg2 < 4) {
+        if (dg2 < 5) {
           chaseState.active = false;
           setChase(null);
           for (const g of chaseState.guards) g.mesh.visible = false;
           chaseState.guards.length = 0;
           setNpcLine({ name: "-", line: "You slip through the grate and vanish into the tunnels. They will not follow." });
-          setObjective("Flee through the Uncharted Forest");
+          advanceTo(5); // Skip to forest chapter
         }
         if (chaseState.timeLeft <= 0 && chaseState.active) {
           // Time ran out - full reset (player + guards)
           camera.position.set(COUNCIL_CX, 1.7, COUNCIL_CZ + 40);
-          chaseState.timeLeft = 90;
-          chaseState.headStart = 2.0;
+          camera.position.x += 10; // Slightly ahead
+          chaseState.timeLeft = 120; // More time
+          chaseState.headStart = 3.0; // Longer head start
           chaseState.hadContact = false;
           for (let i = 0; i < chaseState.guards.length; i++) {
             const gi = chaseState.guards[i];
-            gi.mesh.position.set(COUNCIL_CX + (i - 1) * 3, 0, COUNCIL_CZ + 19);
+            gi.mesh.position.set(COUNCIL_CX + (i - 1) * 3, 0, COUNCIL_CZ + 22);
             gi.state = "seek";
             gi.lastSeen = new THREE.Vector3(COUNCIL_CX, 0, COUNCIL_CZ + 40);
             gi.searchT = 0;
           }
-          setChase({ active: true, timeLeft: 90 });
-          setNpcLine({ name: "-", line: "They've cornered you! Back to the start - run!" });
+          setChase({ active: true, timeLeft: 120 });
+          setNpcLine({ name: "-", line: "They've cornered you! Back to the start - KEEP RUNNING EAST!" });
         }
       }
 
