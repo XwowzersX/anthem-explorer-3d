@@ -944,16 +944,26 @@ export default function AnthemGame() {
     // SURFACE - IRON GRATING
     // =====================================================================
     const GRATE_X = 130, GRATE_Z = 0;
-    for (const [ox, oz, sw, sd] of [[-2.3, 0, 0.6, 5], [2.3, 0, 0.6, 5], [0, -2.3, 5, 0.6], [0, 2.3, 5, 0.6]] as const) {
-      addBox("surface", GRATE_X + ox, 0, GRATE_Z + oz, sw, 0.4, sd, M.plasterDark, false);
+    // Make the grate much more visible - raised iron frame
+    for (const [ox, oz, sw, sd] of [[-2.5, 0, 0.8, 6], [2.5, 0, 0.8, 6], [0, -2.5, 6, 0.8], [0, 2.5, 6, 0.8]] as const) {
+      addBox("surface", GRATE_X + ox, 0, GRATE_Z + oz, sw, 0.6, sd, M.stone3, false);
     }
-    const shaftHole = new THREE.Mesh(new THREE.PlaneGeometry(3.8, 3.8), new THREE.MeshBasicMaterial({ color: 0x000000 }));
+    const shaftHole = new THREE.Mesh(new THREE.PlaneGeometry(4, 4), new THREE.MeshBasicMaterial({ color: 0x0a0a0a }));
     shaftHole.rotation.x = -Math.PI / 2;
-    shaftHole.position.set(GRATE_X, 0.04, GRATE_Z);
+    shaftHole.position.set(GRATE_X, 0.02, GRATE_Z);
     sceneAdd("surface", shaftHole);
-    const grate = new THREE.Mesh(new THREE.BoxGeometry(4, 0.18, 4), M.ironGrate);
-    grate.position.set(GRATE_X, 0.1, GRATE_Z);
+    // Visible iron grate - larger and raised
+    const grate = new THREE.Mesh(new THREE.BoxGeometry(5, 0.3, 5),
+      new THREE.MeshStandardMaterial({ color: 0x2a2a2a, metalness: 0.7, roughness: 0.4 }));
+    grate.position.set(GRATE_X, 0.2, GRATE_Z);
     sceneAdd("surface", grate);
+    // Add grate bars for visibility
+    for (let i = -2; i <= 2; i++) {
+      const bar = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.5, 4.5),
+        new THREE.MeshStandardMaterial({ color: 0x1a1a1a, metalness: 0.8, roughness: 0.3 }));
+      bar.position.set(GRATE_X + i * 0.9, 0.35, GRATE_Z);
+      sceneAdd("surface", bar);
+    }
     let grateOpen = false;
     let grateSlideT = 0;
 
@@ -2303,9 +2313,9 @@ export default function AnthemGame() {
       if (!grateOpen) {
         grateOpen = true;
         grateSlideT = 1;
-        grate.position.x = GRATE_X + 4.2;
-        grate.position.y = 0.05;
-        grate.rotation.z = 0.08;
+        grate.position.x = GRATE_X + 6;
+        grate.position.y = 0.3;
+        grate.rotation.z = 0.15;
       }
       spawnGuards();
       // Re-request pointer lock in case cutscene overlay dropped it.
@@ -2982,9 +2992,9 @@ export default function AnthemGame() {
       // grate slide
       if (grateOpen && grateSlideT < 1) {
         grateSlideT = Math.min(1, grateSlideT + dt * 1.2);
-        grate.position.x = GRATE_X + grateSlideT * 4.2;
-        grate.position.y = 0.1 - grateSlideT * 0.05;
-        grate.rotation.z = grateSlideT * 0.08;
+        grate.position.x = GRATE_X + grateSlideT * 6;
+        grate.position.y = 0.2 + grateSlideT * 0.1;
+        grate.rotation.z = grateSlideT * 0.15;
       }
 
       // beacons: only the one matching the next beat, in any scene
