@@ -1118,6 +1118,35 @@ export default function AnthemGame() {
     };
     addGate(-140, 0, "ns", 8, 4, "Forest forbidden - flee the Council first");
 
+    // Make the forest gate prominent with stone pillars, an archway, and torches
+    {
+      const FG_X = -140, FG_Z = 0;
+      const pillarMat = new THREE.MeshStandardMaterial({ color: 0x5a5048, roughness: 0.95, map: T.stone });
+      // Twin pillars flanking the gate
+      addBox("surface", FG_X - 5, 0, FG_Z, 1.6, 6, 1.6, pillarMat);
+      addBox("surface", FG_X + 5, 0, FG_Z, 1.6, 6, 1.6, pillarMat);
+      // Arch lintel across the top
+      const arch = new THREE.Mesh(new THREE.BoxGeometry(12, 1.2, 1.4), pillarMat);
+      arch.position.set(FG_X, 6.2, FG_Z);
+      sceneAdd("surface", arch);
+      // Torches on each pillar
+      for (const [ox, oz] of [[-5, 0.9], [5, 0.9]] as const) {
+        const torchPole = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 1.2, 6), M.woodDark);
+        torchPole.position.set(FG_X + ox, 4.2, FG_Z + oz);
+        sceneAdd("surface", torchPole);
+        const torchFlame = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.6, 6), M.flame);
+        torchFlame.position.set(FG_X + ox, 5.0, FG_Z + oz);
+        sceneAdd("surface", torchFlame);
+        const torchCore = new THREE.Mesh(new THREE.ConeGeometry(0.11, 0.4, 6), M.flameCore);
+        torchCore.position.set(FG_X + ox, 4.95, FG_Z + oz);
+        sceneAdd("surface", torchCore);
+        const torchLight = new THREE.PointLight(0xff8030, 1.8, 16);
+        torchLight.position.set(FG_X + ox, 5.0, FG_Z + oz);
+        sceneAdd("surface", torchLight);
+        flickerLamps.push({ light: torchLight, base: 1.8, cone: torchFlame, core: torchCore });
+      }
+    }
+
     const trunkGeo = new THREE.CylinderGeometry(0.45, 0.6, 9, 5);
     const topGeo = new THREE.ConeGeometry(2.6, 6, 6);
     for (let i = 0; i < 240; i++) {
@@ -2317,6 +2346,12 @@ export default function AnthemGame() {
         grate.position.y = 0.3;
         grate.rotation.z = 0.15;
       }
+      // Also open the forest gate to the WEST as an alternate escape route
+      const forestGate = gates.find((g) => g.label.includes("Forest"));
+      if (forestGate && !forestGate.open) {
+        forestGate.open = true;
+        forestGate.barMesh.visible = false;
+      }
       spawnGuards();
       // Re-request pointer lock in case cutscene overlay dropped it.
       try { renderer.domElement.requestPointerLock(); } catch { /* ignore */ }
@@ -2923,6 +2958,19 @@ export default function AnthemGame() {
           setNpcLine({ name: "-", line: "You slip through the grate and vanish into the tunnels. They will not follow." });
           advanceTo(5); // Skip to forest chapter
         }
+        // Alternate escape: flee WEST through the forest gate
+        const forestGate = gates.find((g) => g.label.includes("Forest"));
+        if (forestGate && forestGate.open) {
+          const dfg = Math.hypot(camera.position.x - forestGate.x, camera.position.z - forestGate.z);
+          if (dfg < 5) {
+            chaseState.active = false;
+            setChase(null);
+            for (const g of chaseState.guards) g.mesh.visible = false;
+            chaseState.guards.length = 0;
+            setNpcLine({ name: "-", line: "You burst through the forest gate and plunge into the Uncharted Forest. They dare not follow." });
+            advanceTo(5); // Skip to forest chapter
+          }
+        }
         if (chaseState.timeLeft <= 0 && chaseState.active) {
           // Time ran out - guards gave up, player escaped into the forest
           chaseState.active = false;
@@ -3030,6 +3078,18 @@ export default function AnthemGame() {
         if (dg < 5) {
           if (!grateOpen && progressRef.current === 1) near = "Lift the iron grating";
           else if (grateOpen) near = hasLanternRef.current ? "Descend into the tunnel" : "Pitch black below - find a lantern first";
+        }
+        // Forest gate prompt (west side of the city)
+        if (!near) {
+          const forestGate = gates.find((g) => g.label.includes("Forest"));
+          if (forestGate) {
+            const dfg = localPos.distanceTo(new THREE.Vector3(forestGate.x, 1, forestGate.z));
+            if (dfg < 5) {
+              near = forestGate.open
+                ? "Enter the Uncharted Forest"
+                : "A barred gate - the forest is forbidden by the Council";
+            }
+          }
         }
         if (!near) {
           for (const d of doors) {
@@ -3279,7 +3339,7 @@ export default function AnthemGame() {
           {/* Chase timer banner */}
           {chase?.active && (
             <div className="absolute top-16 left-1/2 -translate-x-1/2 z-20 px-4 py-2 border border-red-600 bg-black/70 text-red-300 uppercase tracking-[0.3em] text-xs animate-pulse">
-              Guards pursuing - {Math.ceil(chase.timeLeft)}s
+              Guards pursuing - {Math.ceil(chase.timeLeft)}s · Flee EAST to the grate or WEST to the forest gate
             </div>
           )}
 
