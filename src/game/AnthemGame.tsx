@@ -124,6 +124,11 @@ type Gate = {
   open: boolean;
   label: string;
   position: THREE.Vector3;
+  x: number;
+  z: number;
+  orient: "ns" | "ew";
+  panels: THREE.Mesh[];
+  slideT: number;
 };
 
 const OBJECTIVES = [
@@ -1103,18 +1108,49 @@ export default function AnthemGame() {
     // =====================================================================
     // SURFACE - UNCHARTED FOREST
     // =====================================================================
-    // Forest gate (still uses gate system - it's a barrier, not a door)
+    // Forest gate with sliding double-door panels
     const gates: Gate[] = [];
     const addGate = (x: number, z: number, orient: "ns" | "ew", w: number, unlockAfter: number, label: string) => {
-      const ww = orient === "ns" ? w : 0.6;
-      const dd = orient === "ns" ? 0.6 : w;
-      const mesh = new THREE.Mesh(new THREE.BoxGeometry(ww, 3.6, dd), M.door);
-      mesh.position.set(x, 1.8, z);
-      sceneAdd("surface", mesh);
-      const box = new THREE.Box3().setFromObject(mesh).expandByScalar(0.1);
-      const collider = { box };
+      const panelW = w / 2;
+      const panelH = 4.2;
+      const panelD = 0.4;
+      const panelMat = new THREE.MeshStandardMaterial({ color: 0x3a3028, roughness: 0.85, metalness: 0.15 });
+      const ironBandMat = new THREE.MeshStandardMaterial({ color: 0x4a4238, roughness: 0.6, metalness: 0.5 });
+      const panels: THREE.Mesh[] = [];
+      // Two panels that meet in the center when closed, slide apart when open
+      for (const side of [-1, 1] as const) {
+        const panel = new THREE.Mesh(new THREE.BoxGeometry(panelW, panelH, panelD), panelMat);
+        // Orient: "ns" means the gate spans north-south (wall runs along z), door slides along z
+        if (orient === "ns") {
+          panel.position.set(x, panelH / 2, z + side * panelW / 2);
+        } else {
+          panel.rotation.y = Math.PI / 2;
+          panel.position.set(x + side * panelW / 2, panelH / 2, z);
+        }
+        sceneAdd("surface", panel);
+        // Iron bands across the panel
+        for (const by of [1.0, 3.0] as const) {
+          const band = new THREE.Mesh(
+            new THREE.BoxGeometry(panelW + 0.1, 0.2, panelD + 0.1),
+            ironBandMat,
+          );
+          if (orient === "ns") band.position.set(x, by, z + side * panelW / 2);
+          else { band.rotation.y = Math.PI / 2; band.position.set(x + side * panelW / 2, by, z); }
+          sceneAdd("surface", band);
+        }
+        panels.push(panel);
+      }
+      // Collider covers the full gate opening when closed
+      const colliderBox = orient === "ns"
+        ? new THREE.Box3(new THREE.Vector3(x - 0.5, 0, z - w / 2), new THREE.Vector3(x + 0.5, panelH, z + w / 2))
+        : new THREE.Box3(new THREE.Vector3(x - w / 2, 0, z - 0.5), new THREE.Vector3(x + w / 2, panelH, z + 0.5));
+      const collider = { box: colliderBox };
       colliderSets.surface.push(collider);
-      gates.push({ unlockAfter, collider, mesh, open: false, label, position: new THREE.Vector3(x, 1.8, z) });
+      // A hidden mesh for compatibility (gate system expects a .mesh)
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.01, 0.01, 0.01), M.door);
+      mesh.visible = false;
+      sceneAdd("surface", mesh);
+      gates.push({ unlockAfter, collider, mesh, open: false, label, position: new THREE.Vector3(x, 1.8, z), x, z, orient, panels, slideT: 0 });
     };
     addGate(-140, 0, "ns", 8, 4, "Forest forbidden - flee the Council first");
 
@@ -1145,6 +1181,29 @@ export default function AnthemGame() {
         sceneAdd("surface", torchLight);
         flickerLamps.push({ light: torchLight, base: 1.8, cone: torchFlame, core: torchCore });
       }
+    }
+
+    // =====================================================================
+    // FOREST PERIMETER WALL - encloses the entire forest; gate is the only passage
+    // =====================================================================
+    {
+      const wallMat = new THREE.MeshStandardMaterial({ color: 0x4a4238, roughness: 0.95, map: T.stone });
+      const FW_WEST = -460;   // west edge of forest
+      const FW_NORTH = -240;  // north edge (negative z)
+      const FW_SOUTH = 240;   // south edge (positive z)
+      const FW_EAST = -140;   // east edge (gate line)
+      const wallH = 5;
+      const wallT = 1.2;
+      const GATE_GAP = 5; // half-width of the gate opening
+      // East wall: two segments with gap at z=0 for the gate
+      addBox("surface", FW_EAST, 0, (FW_NORTH + (-GATE_GAP)) / 2, wallT, wallH, (-GATE_GAP) - FW_NORTH, wallMat);
+      addBox("surface", FW_EAST, 0, (GATE_GAP + FW_SOUTH) / 2, wallT, wallH, FW_SOUTH - GATE_GAP, wallMat);
+      // North wall
+      addBox("surface", (FW_EAST + FW_WEST) / 2, 0, FW_NORTH, (FW_WEST - FW_EAST), wallH, wallT, wallMat);
+      // South wall
+      addBox("surface", (FW_EAST + FW_WEST) / 2, 0, FW_SOUTH, (FW_WEST - FW_EAST), wallH, wallT, wallMat);
+      // West wall
+      addBox("surface", FW_WEST, 0, 0, wallT, wallH, FW_SOUTH - FW_NORTH, wallMat);
     }
 
     const trunkGeo = new THREE.CylinderGeometry(0.45, 0.6, 9, 5);
@@ -2350,7 +2409,8 @@ export default function AnthemGame() {
       const forestGate = gates.find((g) => g.label.includes("Forest"));
       if (forestGate && !forestGate.open) {
         forestGate.open = true;
-        forestGate.barMesh.visible = false;
+        const idx = colliderSets.surface.indexOf(forestGate.collider);
+        if (idx >= 0) colliderSets.surface.splice(idx, 1);
       }
       spawnGuards();
       // Re-request pointer lock in case cutscene overlay dropped it.
@@ -2961,7 +3021,7 @@ export default function AnthemGame() {
         // Alternate escape: flee WEST through the forest gate
         const forestGate = gates.find((g) => g.label.includes("Forest"));
         if (forestGate && forestGate.open) {
-          const dfg = Math.hypot(camera.position.x - forestGate.x, camera.position.z - forestGate.z);
+          const dfg = Math.hypot(camera.position.x - forestGate.position.x, camera.position.z - forestGate.position.z);
           if (dfg < 5) {
             chaseState.active = false;
             setChase(null);
@@ -2992,6 +3052,22 @@ export default function AnthemGame() {
       // Garden gate rising animation
       if (gatePuzzle.solved && gatePuzzle.mesh.position.y < 6.5) {
         gatePuzzle.mesh.position.y = Math.min(6.5, gatePuzzle.mesh.position.y + dt * 1.2);
+      }
+
+      // Forest gate sliding animation
+      for (const g of gates) {
+        const target = g.open ? 1 : 0;
+        if (Math.abs(g.slideT - target) > 0.001) {
+          g.slideT += (target - g.slideT) * Math.min(1, dt * 4);
+          const slide = g.slideT * (g.orient === "ns" ? 4 : 4);
+          if (g.orient === "ns") {
+            g.panels[0].position.z = g.z - 4 + slide;
+            g.panels[1].position.z = g.z + 4 - slide;
+          } else {
+            g.panels[0].position.x = g.x - 4 + slide;
+            g.panels[1].position.x = g.x + 4 - slide;
+          }
+        }
       }
 
 
@@ -3083,7 +3159,7 @@ export default function AnthemGame() {
         if (!near) {
           const forestGate = gates.find((g) => g.label.includes("Forest"));
           if (forestGate) {
-            const dfg = localPos.distanceTo(new THREE.Vector3(forestGate.x, 1, forestGate.z));
+            const dfg = localPos.distanceTo(new THREE.Vector3(forestGate.position.x, 1, forestGate.position.z));
             if (dfg < 5) {
               near = forestGate.open
                 ? "Enter the Uncharted Forest"
